@@ -1,119 +1,275 @@
-'use client';
-
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import HeroMap from '@/components/HeroMap';
-import { CONS, CONS_CODES, FRAGILE, kgTxt, modeRange } from '@/lib/data';
-import { useStore } from '@/lib/store';
-
+"use client";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import {
+  ArrowRight,
+  Bus,
+  Package,
+  Search,
+  MapPin,
+  Ticket,
+  ShieldCheck,
+  Route,
+  BriefcaseBusiness,
+  Check,
+  ArrowUpRight,
+} from "lucide-react";
 export default function Home() {
+  const [q, setQ] = useState("");
   const router = useRouter();
-  const { S } = useStore();
-  const T = S.tarifs;
-  const range = (m: 'EXPRESS' | 'FRET' | 'MASSE') => { const [lo, hi] = modeRange(T, m); return lo ? `De ${kgTxt(lo)} à ${kgTxt(hi)}` : `Jusqu'à ${kgTxt(hi)}`; };
-  const [q, setQ] = useState('');
   return (
-    <section className="view-home">
-      <div className="hero">
-        <div className="hero-in">
-          <div className="hero-copy">
-            <img className="hero-logo" src="/logo-hero.png" alt="Afrique Express Services, livraison à tout moment, en tout lieu" width={300} height={110} />
-            <span className="eyebrow">Livraison express · Fret routier · Transport de masse</span>
-            <h1>Chaque trajet, chaque colis, suivi de <em>Dakar</em> à Ziguinchor.</h1>
-            <p className="hero-lead">Du petit colis livré à moto dans Dakar au camion complet entre deux villes : le transport s&apos;adapte au poids de votre envoi. Chaque étape est enregistrée, de l&apos;enlèvement jusqu&apos;à la remise.</p>
-            <form className="track-box" onSubmit={e => { e.preventDefault(); router.push('/suivre?q=' + encodeURIComponent(q.trim().toUpperCase() || 'COL-2026-000001')); }}>
-              <input value={q} onChange={e => setQ(e.target.value)} placeholder="COL-2026-000001 ou TKT-…" aria-label="Numéro de colis ou de ticket" autoComplete="off" />
-              <button className="btn btn-accent" type="submit">Suivre</button>
-            </form>
-            <div className="hero-ctas">
-              <Link className="btn btn-line" href="/envoyer">Envoyer un colis</Link>
-              <Link className="btn btn-line" href="/suivre">Suivre un envoi</Link>
+    <div className="landing">
+      <section className="landing-hero wrap">
+        <div className="hero-text">
+          <span className="section-tag">
+            <span />
+            VOS TRAJETS. VOS COLIS. UN SEUL ENDROIT.
+          </span>
+          <h1>
+            Plus proche.
+            <br />
+            Plus simple.
+            <br />
+            <em>Partout au Sénégal.</em>
+          </h1>
+          <p>
+            Un voyage à préparer, un colis à envoyer ?<br />
+            Lifekhalifa vous accompagne, du départ à l’arrivée.
+          </p>
+          <div className="hero-buttons">
+            <Link className="btn btn-accent btn-lg" href="/voyager">
+              <Bus size={19} />
+              Réserver un voyage
+              <ArrowRight size={18} />
+            </Link>
+            <Link className="btn btn-lg" href="/envoyer">
+              <Package size={19} />
+              Envoyer un colis
+            </Link>
+          </div>
+          <div className="hero-assurance">
+            <ShieldCheck size={17} />
+            Un suivi à chaque étape<span>•</span>Vos informations en sécurité
+          </div>
+        </div>
+        <div
+          className="journey-art"
+          aria-label="Voyages et livraisons entre Dakar et les régions"
+        >
+          <div className="art-grid" />
+          <div className="art-orbit orbit-one" />
+          <div className="art-orbit orbit-two" />
+          <div className="art-label">
+            <span className="live-dot" />
+            LE SÉNÉGAL NOUS RAPPROCHE
+          </div>
+          <svg className="route-art" viewBox="0 0 500 440" aria-hidden="true">
+            <path
+              d="M100 320 C80 170 300 360 310 190 S390 80 410 90"
+              fill="none"
+              stroke="#98c9b7"
+              strokeWidth="3"
+              strokeDasharray="7 8"
+            />
+            <path
+              d="M100 320 C80 170 300 360 310 190"
+              fill="none"
+              stroke="#0b7157"
+              strokeWidth="3"
+            />
+            <circle
+              cx="100"
+              cy="320"
+              r="10"
+              fill="#0b7157"
+              stroke="white"
+              strokeWidth="5"
+            />
+            <circle
+              cx="310"
+              cy="190"
+              r="10"
+              fill="#0b7157"
+              stroke="white"
+              strokeWidth="5"
+            />
+            <circle
+              cx="410"
+              cy="90"
+              r="7"
+              fill="#e99845"
+              stroke="white"
+              strokeWidth="4"
+            />
+          </svg>
+          <span className="city city-dakar">Dakar</span>
+          <span className="city city-touba">Touba</span>
+          <span className="city city-saint">Saint-Louis</span>
+          <div className="floating-ticket">
+            <div className="mini-icon">
+              <Ticket size={22} />
             </div>
-            <p className="hero-pay">Wave · Orange Money · Carte bancaire · Espèces en agence</p>
+            <div>
+              <small>VOTRE PROCHAIN DÉPART</small>
+              <strong>Une place vous attend.</strong>
+              <span>Lifekhalifa Tours</span>
+            </div>
+            <Check className="ticket-check" size={18} />
           </div>
-          <div id="hero-stage" aria-hidden="true"><HeroMap /></div>
-        </div>
-        <div className="hero-legend">
-          <span><i style={{ background: '#2CC9B6' }} />Véhicules</span>
-          <span><i style={{ background: '#7FB2DA' }} />Livreurs</span>
-          <span><i style={{ background: '#ECF3F8' }} />Agences</span>
-        </div>
-      </div>
-
-      <div className="wrap">
-        <div className="sec">
-          <div className="sec-h">
-            <h2>Trois transports, selon le poids.</h2>
-            <p>Indiquez le poids de votre envoi : nous proposons le transport adapté. Les seuils sont réglables par la direction.</p>
+          <div className="floating-package">
+            <span className="package-illustration">
+              <Package size={55} strokeWidth={1.2} />
+            </span>
+            <div>
+              <strong>Votre colis, bien accompagné.</strong>
+              <span>De main en main, en toute confiance.</span>
+            </div>
           </div>
-          <div className="mods">
-            <article className="mod feature">
-              <div className="mod-code"><span>{range('EXPRESS')}</span><span>Moto · scooter</span></div>
-              <h3>Livraison express</h3>
-              <ul><li>Petits colis livrés de porte à porte dans Dakar</li><li>Devis immédiat au poids volumétrique et heure d&apos;arrivée</li><li>Livreur le plus proche, tournées par zone, suivi sur carte</li><li>Preuve de livraison : code, signature et photo</li></ul>
-              <Link className="btn btn-accent" href="/envoyer">Envoyer en express</Link>
-            </article>
-            <article className="mod">
-              <div className="mod-code"><span>{range('FRET')}</span><span>Fourgon · camionnette</span></div>
-              <h3>Fret routier</h3>
-              <ul><li>Colis moyens déposés dans l&apos;une de nos 8 agences</li><li>Pesage, emballage et étiquette code-barres au guichet</li><li>Transfert suivi par GPS entre les villes</li><li>Retrait en agence ou livraison à l&apos;arrivée</li></ul>
-              <Link className="btn" href="/envoyer">Estimer un fret</Link>
-            </article>
-            <article className="mod">
-              <div className="mod-code"><span>{range('MASSE')}</span><span>Camion · semi-remorque</span></div>
-              <h3>Transport de masse</h3>
-              <ul><li>Gros volumes et chargements complets</li><li>Enlèvement sur site : entrepôt, usine, port, chantier</li><li>Camion dédié, frigorifique pour le frais et le congelé</li><li>Prix à la tonne et au kilomètre, devis immédiat</li></ul>
-              <Link className="btn" href="/envoyer">Demander un camion</Link>
-            </article>
+          <div className="art-bottom">
+            <Route size={18} />
+            <span>Une équipe. Un réseau. Votre confiance.</span>
           </div>
         </div>
-
-        <div className="sec">
-          <div className="sec-h">
-            <h2>Chaque envoi a sa catégorie.</h2>
-            <p>Deux critères : la conservation et la fragilité. Ils fixent la zone de stockage, l&apos;emballage, le véhicule autorisé et la majoration de prix.</p>
-          </div>
-          <div className="spaces">
-            {CONS_CODES.map(k => (
-              <div className="space" key={k} style={{ cursor: 'default' }}><b>{CONS[k].label}</b><span>{CONS[k].hint}{CONS[k].sur ? ` · +${Math.round(CONS[k].sur * 100)} %` : ''}{CONS[k].cold ? ' · véhicule réfrigéré' : ''}</span></div>
-            ))}
-            <div className="space" style={{ cursor: 'default' }}><b>Fragile ou non fragile</b><span>{FRAGILE.hint} · +{Math.round(FRAGILE.sur * 100)} % si fragile. Se combine avec la conservation.</span></div>
+      </section>
+      <section className="wrap tracking-section">
+        <div>
+          <Search size={22} />
+          <div>
+            <h2>Déjà en route ?</h2>
+            <p>Retrouvez votre envoi ou votre billet.</p>
           </div>
         </div>
-
-        <div className="sec">
-          <div className="sec-h">
-            <h2>Le parcours d&apos;un colis de fret.</h2>
-            <p>Quatre processus, onze statuts. Le client reçoit un message à chaque changement important.</p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (q.trim())
+              router.push("/suivre?q=" + encodeURIComponent(q.trim()));
+          }}
+        >
+          <label className="sr-only" htmlFor="quick-track">
+            Numéro de suivi
+          </label>
+          <input
+            id="quick-track"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            required
+            placeholder="Votre numéro de suivi ou de billet"
+          />
+          <button className="btn btn-accent">
+            Suivre
+            <ArrowRight size={17} />
+          </button>
+        </form>
+      </section>
+      <section className="wrap home-services">
+        <div className="section-heading">
+          <div>
+            <span className="section-tag">COMMENT PEUT-ON VOUS AIDER ?</span>
+            <h2>
+              Vous choisissez la destination.
+              <br />
+              On s’occupe de la suite.
+            </h2>
           </div>
-          <div className="flow">
-            <div><span className="n">Processus 1</span><h4>Prise en charge</h4><p>Identification, catégorie, emballage, pesage, facturation, paiement et étiquette.</p><div className="st"><span className="pill t-n">Créé</span><span className="pill t-n">En préparation</span></div></div>
-            <div><span className="n">Processus 2</span><h4>Stockage</h4><p>Le colis rejoint la zone adaptée à sa catégorie, avec un emplacement précis.</p><div className="st"><span className="pill t-b">Stocké</span><span className="pill t-b">Prêt au transfert</span></div></div>
-            <div><span className="n">Processus 3</span><h4>Transfert</h4><p>Chargé dans un véhicule, suivi par GPS jusqu&apos;à l&apos;agence de destination.</p><div className="st"><span className="pill t-w">En transit</span><span className="pill t-b">Arrivé</span></div></div>
-            <div><span className="n">Processus 4</span><h4>Remise</h4><p>Retrait en agence sur pièce d&apos;identité ou livraison par un livreur.</p><div className="st"><span className="pill t-w">En livraison</span><span className="pill t-g">Livré</span><span className="pill t-g">Retiré</span></div></div>
-          </div>
+          <p>
+            Des services pensés pour votre quotidien,
+            <br />
+            sur votre téléphone comme en agence.
+          </p>
         </div>
-
-        <div className="sec">
-          <div className="sec-h">
-            <h2>Les espaces de l&apos;équipe.</h2>
-            <p>Chaque rôle dispose de son écran. Les actions faites ici se répercutent partout : créez un colis au guichet, faites-le partir avec un chauffeur, suivez-le côté client.</p>
-          </div>
-          <div className="spaces">
-            <Link className="space" href="/agent"><b>Agent d&apos;agence</b><span>Guichet colis, stock, remise au bénéficiaire</span></Link>
-            <Link className="space" href="/chauffeur"><b>Chauffeur</b><span>Chargement, départ, position, arrivée</span></Link>
-            <Link className="space" href="/livreur"><b>Livreur</b><span>Missions, scan QR, preuve de livraison</span></Link>
-            <Link className="space" href="/admin"><b>Administrateur</b><span>Tableau de bord, dispatch, tournées, flotte, tarifs, API</span></Link>
-          </div>
+        <div className="service-grid">
+          <Link href="/voyager" className="service-card travel-card">
+            <span className="service-icon">
+              <Bus />
+            </span>
+            <span className="section-tag">LIFEKHALIFA TOURS</span>
+            <h3>Le voyage commence ici.</h3>
+            <p>
+              Trouvez votre départ, choisissez votre place et retrouvez votre
+              billet sur votre téléphone.
+            </p>
+            <span className="service-link">
+              Trouver un trajet
+              <ArrowUpRight size={20} />
+            </span>
+            <span className="service-number">01</span>
+          </Link>
+          <Link href="/envoyer" className="service-card parcel-card">
+            <span className="service-icon">
+              <Package />
+            </span>
+            <span className="section-tag">LIVREX · FRET EXPRESS</span>
+            <h3>Petit colis. Grand trajet.</h3>
+            <p>
+              Dans Dakar ou entre les villes, préparez votre envoi et suivez
+              toutes ses étapes.
+            </p>
+            <span className="service-link">
+              Préparer mon envoi
+              <ArrowUpRight size={20} />
+            </span>
+            <span className="service-number">02</span>
+          </Link>
         </div>
-      </div>
-      <footer className="foot">
-        <div className="wrap">
-          <span>Afrique Express Services · Groupe LIFEKHALIFA · Livraison à tout moment, en tout lieu</span>
-          <span>Prototype fonctionnel. Tarifs, véhicules et personnes sont des exemples à valider.</span>
+      </section>
+      <section className="wrap simplicity">
+        <div>
+          <span className="section-tag">SIMPLEMENT, DE BOUT EN BOUT</span>
+          <h2>
+            Moins de démarches.
+            <br />
+            Plus de tranquillité.
+          </h2>
         </div>
+        {[
+          {
+            icon: MapPin,
+            title: "Choisissez votre destination",
+            text: "Un départ, une arrivée. Nous vous guidons.",
+          },
+          {
+            icon: Ticket,
+            title: "Confirmez en quelques étapes",
+            text: "Un prix affiché avant toute confirmation.",
+          },
+          {
+            icon: ShieldCheck,
+            title: "Gardez tout à portée de main",
+            text: "Billets, envois et suivi dans Mes activités.",
+          },
+        ].map((x, i) => (
+          <article key={x.title}>
+            <span className="how-icon">
+              <x.icon size={22} />
+            </span>
+            <small>0{i + 1}</small>
+            <h3>{x.title}</h3>
+            <p>{x.text}</p>
+          </article>
+        ))}
+      </section>
+      <section className="wrap pro-banner">
+        <BriefcaseBusiness size={30} />
+        <div>
+          <h2>Vous faites partie de l’équipe ?</h2>
+          <p>
+            Vos missions et vos outils, réunis dans votre espace professionnel.
+          </p>
+        </div>
+        <Link className="btn" href="/pro">
+          Accéder à mon espace
+          <ArrowRight size={17} />
+        </Link>
+      </section>
+      <footer className="site-footer wrap">
+        <Link href="/" className="wordmark">
+          LIVREX<span className="muted"> / Lifekhalifa</span>
+        </Link>
+        <p>Voyager. Envoyer. Se rapprocher.</p>
+        <Link href="/aide">Besoin d’aide ?</Link>
       </footer>
-    </section>
+    </div>
   );
 }

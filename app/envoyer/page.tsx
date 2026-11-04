@@ -1,293 +1,627 @@
-'use client';
-
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type InputHTMLAttributes } from 'react';
-import MapCanvas from '@/components/MapCanvas';
-import { Waybill } from '@/components/Paper';
-import { CategoryPicker, ModePicker } from '@/components/Pickers';
-import { Choice, PageHead } from '@/components/ui';
-import { setStatus } from '@/lib/actions';
-import { AG, AG_CODES, catLabel, isCold, kgTxt, METHODS, MODES, QUARTIERS, qp, ST } from '@/lib/data';
-import { agencyPts, allowedModes, findParcel, modeForWeight } from '@/lib/domain';
-import { dIso, fcfa, nf, otp, pad } from '@/lib/format';
-import { priceExp, priceFret, priceMasse } from '@/lib/pricing';
-import { useStore } from '@/lib/store';
-import type { AgencyCode, Channel, Cons, Method, Mode, Parcel } from '@/lib/types';
-
-interface Form {
-  /* Commun aux trois transports */
-  weight: number; cons: Cons; fragile: boolean; desc: string;
-  sender: string; senderTel: string; recipient: string; recipientTel: string; channel: Channel;
-  /* Express : quartiers de Dakar, dimensions, vitesse */
-  fromQ: string; fromNote: string; toQ: string; toNote: string;
-  L: number; W: number; H: number; service: 'EXPRESS' | 'STANDARD';
-  /* Fret et masse : villes */
-  from: AgencyCode; to: AgencyCode;
-  /* Fret : à l'arrivée */
-  delivery: 'retrait' | 'livraison';
-  /* Masse : adresses et date */
-  pickupAddr: string; dropAddr: string; wanted: string;
+"use client";
+import Link from "next/link";
+import { useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Package,
+  MapPin,
+  Truck,
+  ShieldCheck,
+} from "lucide-react";
+import { useStore } from "@/lib/store";
+import { PageHead, Stepper } from "@/components/ui";
+import { Waybill } from "@/components/Paper";
+import { AG, AG_CODES, QUARTIERS, CONS } from "@/lib/data";
+import { priceExp, priceFret, priceMasse } from "@/lib/pricing";
+import { fcfa, dIso } from "@/lib/format";
+import type { AgencyCode, Cons, Mode, Parcel } from "@/lib/types";
+interface Draft {
+  type: Mode;
+  from: AgencyCode;
+  to: AgencyCode;
+  fromQ: string;
+  toQ: string;
+  weight: number;
+  L: number;
+  W: number;
+  H: number;
+  cons: Cons;
+  fragile: boolean;
+  desc: string;
+  sender: string;
+  senderTel: string;
+  recipient: string;
+  recipientTel: string;
+  service: "STANDARD" | "EXPRESS";
+  pickupAddr: string;
+  dropAddr: string;
+  wanted: string;
+  delivery: "retrait" | "livraison";
 }
-
-const BLANK: Form = {
-  weight: 2, cons: 'SEC', fragile: false, desc: '',
-  sender: '', senderTel: '', recipient: '', recipientTel: '', channel: 'SMS',
-  fromQ: 'Plateau', fromNote: '', toQ: 'Almadies', toNote: '', L: 30, W: 20, H: 15, service: 'EXPRESS',
-  from: 'DKR', to: 'TBA', delivery: 'retrait',
-  pickupAddr: '', dropAddr: '', wanted: dIso(Date.now() + 864e5),
+const initial: Draft = {
+  type: "EXPRESS",
+  from: "DKR",
+  to: "TBA",
+  fromQ: "Plateau",
+  toQ: "Almadies",
+  weight: 2,
+  L: 30,
+  W: 20,
+  H: 15,
+  cons: "SEC",
+  fragile: false,
+  desc: "",
+  sender: "",
+  senderTel: "",
+  recipient: "",
+  recipientTel: "",
+  service: "STANDARD",
+  pickupAddr: "",
+  dropAddr: "",
+  wanted: dIso(Date.now() + 86400000),
+  delivery: "retrait",
 };
+export default function Send() {
+  const { S, user, refresh } = useStore();
+  const [f, setF] = useState<Draft>(() => {
+      try {
+        const saved =
+          typeof window !== "undefined" &&
+          sessionStorage.getItem("livrex-send-draft");
+        return saved ? { ...initial, ...JSON.parse(saved) } : initial;
+      } catch {
+        return initial;
+      }
+    }),
+    [step, setStep] = useState(0),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [done, setDone] = useState<Parcel | null>(null);
+  const [requestId, setRequestId] = useState("");
+  const [today] = useState(() => dIso(Date.now()));
 
-export default function Envoyer() {
-  const { S, act } = useStore();
-  const router = useRouter();
-  const T = S.tarifs;
-  const [f, setF] = useState<Form>(BLANK);
-  /** Type choisi à la main ; sinon on suit la proposition selon le poids */
-  const [picked, setPicked] = useState<Mode | null>(null);
-  const [method, setMethod] = useState<Method>('WAVE');
-  const [paying, setPaying] = useState(false);
-  const [err, setErr] = useState('');
-  const [doneId, setDoneId] = useState<string | null>(null);
-
-  const set = <K extends keyof Form>(k: K, v: Form[K]) => setF(x => ({ ...x, [k]: v }));
-  const w = +f.weight || 0;
-  const ok = allowedModes(T, w);
-  const mode: Mode = picked && ok.includes(picked) ? picked : modeForWeight(T, w);
-  const tooHeavy = !ok.length;
-
-  const exp = priceExp(T, f);
-  const fret = f.from !== f.to ? priceFret(T, { ...f, packed: 'client', service: 'STANDARD' }) : null;
-  const masse = priceMasse(T, f);
-  const total = mode === 'EXPRESS' ? exp.total : mode === 'MASSE' ? masse.total : fret?.total || 0;
-
-  const submit = () => {
-    const miss = ([['sender', 'expéditeur'], ['senderTel', 'téléphone expéditeur'], ['recipient', 'destinataire'], ['recipientTel', 'téléphone destinataire']] as const)
-      .filter(([k]) => !String(f[k]).trim()).map(x => x[1] as string);
-    if (mode === 'EXPRESS' && f.fromQ === f.toQ) miss.push('deux quartiers différents');
-    if (mode === 'MASSE' && !f.pickupAddr.trim()) miss.push("adresse d'enlèvement");
-    if (mode === 'MASSE' && !f.dropAddr.trim()) miss.push('adresse de livraison');
-    if (miss.length) { setErr('À compléter : ' + miss.join(', ') + '.'); return; }
-    setErr(''); setPaying(true);
-    setTimeout(() => {
-      const id = act(c => {
-        const t = c.S.tarifs;
-        const base = {
-          sender: f.sender.trim(), senderTel: f.senderTel.trim(), recipient: f.recipient.trim(), recipientTel: f.recipientTel.trim(),
-          desc: f.desc, cons: f.cons, fragile: f.fragile, weight: w, channel: f.channel, delivery: 'livraison' as const, packed: 'client' as const,
-          zone: '', otp: otp(), track: [], history: [], status: ST.CREATED, created: Date.now(), updated: Date.now(),
-        };
-        let p: Parcel;
-        if (mode === 'EXPRESS') {
-          const r = priceExp(t, f);
-          p = {
-            ...base, id: 'EXP-2026-' + pad(++c.S.seq.EXP), type: 'EXPRESS', fromQ: f.fromQ, toQ: f.toQ,
-            pickup: { ...qp(f.fromQ), label: f.fromQ + (f.fromNote ? ' · ' + f.fromNote : '') },
-            drop: { ...qp(f.toQ), label: f.toQ + (f.toNote ? ' · ' + f.toNote : '') },
-            L: +f.L, W: +f.W, H: +f.H, service: f.service, price: r.total, payment: null,
-          };
-        } else {
-          const r = priceMasse(t, f);
-          p = {
-            ...base, id: 'MAS-2026-' + pad(++c.S.seq.MAS), type: 'MASSE', from: f.from, to: f.to,
-            pickupAddr: f.pickupAddr.trim(), dropAddr: f.dropAddr.trim(), wanted: f.wanted, service: 'STANDARD', price: r.total, payment: null,
-          };
-        }
-        p.payment = { mode: method, ref: 'PAY-' + pad(++c.S.seq.PAY), amount: p.price, status: method === 'COD' ? 'À encaisser' : 'Payé', t: Date.now() };
-        c.S.parcels.unshift(p);
-        setStatus(c, p, ST.CREATED, 'Commande en ligne · ' + METHODS[method] + (p.type === 'MASSE' ? ' · enlèvement souhaité le ' + new Date(f.wanted + 'T12:00').toLocaleDateString('fr-FR') : ''));
-        return p.id;
-      });
-      setPaying(false); setDoneId(id); window.scrollTo({ top: 0 });
-    }, 1200);
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => {
+    const next = { ...f, [k]: v };
+    setF(next);
+    try {
+      sessionStorage.setItem("livrex-send-draft", JSON.stringify(next));
+    } catch {}
+    setRequestId("");
   };
-
-  const done = doneId ? findParcel(S, doneId) : null;
-  if (done) {
-    const isMasse = done.type === 'MASSE';
+  const price =
+    f.type === "EXPRESS"
+      ? priceExp(S.tarifs, f)
+      : f.type === "FRET"
+        ? priceFret(S.tarifs, { ...f, packed: "client" })
+        : priceMasse(S.tarifs, f);
+  function next(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    if (
+      step === 0 &&
+      ((f.type === "EXPRESS" && f.fromQ === f.toQ) ||
+        (f.type !== "EXPRESS" && f.from === f.to))
+    ) {
+      setError("Choisissez un départ et une arrivée différents.");
+      return;
+    }
+    if (
+      step === 1 &&
+      f.weight >
+        (f.type === "EXPRESS"
+          ? S.tarifs.expressMax
+          : f.type === "FRET"
+            ? S.tarifs.fretMax
+            : S.tarifs.masseMax)
+    ) {
+      setError(
+        "Le poids dépasse la capacité de ce service. Choisissez un autre service à l’étape précédente.",
+      );
+      return;
+    }
+    setStep(step + 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  async function confirm() {
+    setBusy(true);
+    setError("");
+    try {
+      const id = requestId || crypto.randomUUID();
+      setRequestId(id);
+      const r = await fetch("/api/parcels", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": id,
+        },
+        body: JSON.stringify(f),
+      });
+      const d = await r.json();
+      if (!r.ok) throw Error(d.error);
+      await refresh();
+      setDone(d);
+      sessionStorage.removeItem("livrex-send-draft");
+      window.scrollTo({ top: 0 });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Impossible de confirmer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const field = (
+    k: keyof Draft,
+    label: string,
+    type = "text",
+    extra: Record<string, string | number> = {},
+  ) => (
+    <div className="field">
+      <label htmlFor={"send-" + k}>{label}</label>
+      <input
+        id={"send-" + k}
+        className="in"
+        value={f[k] as string | number}
+        type={type}
+        required
+        onChange={(e) =>
+          set(
+            k,
+            (type === "number"
+              ? Number(e.target.value)
+              : e.target.value) as never,
+          )
+        }
+        {...extra}
+      />
+    </div>
+  );
+  const city = (k: "from" | "to", label: string) => (
+    <div className="field">
+      <label htmlFor={"send-" + k}>{label}</label>
+      <select
+        className="in"
+        id={"send-" + k}
+        value={f[k]}
+        onChange={(e) => set(k, e.target.value as AgencyCode)}
+      >
+        {AG_CODES.map((c) => (
+          <option value={c} key={c}>
+            {AG[c].name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+  if (done)
     return (
       <section className="view">
-        <PageHead eyebrow={`${MODES[done.type].label} · Commande confirmée`} title={`Commande ${done.id} enregistrée`}
-          lead={isMasse ? 'Un camion adapté va être réservé. Nous vous appelons pour confirmer l’heure d’enlèvement.' : 'Un livreur va être affecté. Vous recevrez un SMS à chaque étape.'} />
-        <div className="wrap split">
-          <div className="paper label" style={{ maxWidth: 'none' }}><Waybill p={done} /></div>
+        <PageHead
+          eyebrow="Votre envoi est enregistré"
+          title="C’est parti, on prend le relais."
+          lead="Retrouvez cet envoi et toutes ses étapes dans Mes activités."
+        />
+        <div className="wrap wizard-layout">
+          <div className="paper label" style={{ maxWidth: "none" }}>
+            <Waybill p={done} />
+          </div>
           <div className="card stack">
-            <h3>Et maintenant ?</h3>
-            <p className="muted">{isMasse ? 'Le chauffeur présentera cette lettre de voiture à l’enlèvement et la fera signer à la livraison.' : 'Imprimez ou recopiez la lettre de voiture sur le colis. Le livreur scannera le QR code au ramassage.'}</p>
-            <div className="row no-print">
-              <button className="btn btn-accent" onClick={() => router.push('/suivre?q=' + done.id)}>Suivre</button>
-              <button className="btn" onClick={() => window.print()}>Imprimer la lettre de voiture</button>
-              <button className="btn" onClick={() => { setDoneId(null); setF(BLANK); setPicked(null); }}>Nouvel envoi</button>
-            </div>
-            <p className="note">Côté équipe : la commande apparaît dans <b>{isMasse ? 'Admin › Transport de masse' : 'Admin › Dispatch'}</b>, puis dans l&apos;espace <b>{isMasse ? 'Chauffeur' : 'Livreur'}</b>.</p>
+            <span className="success-icon">
+              <Check />
+            </span>
+            <h2>{done.id}</h2>
+            <p>
+              {done.type === "EXPRESS"
+                ? "Votre demande de collecte est transmise à l’équipe."
+                : "Déposez votre colis en agence ou attendez la confirmation de votre enlèvement."}
+            </p>
+            <p className="note">
+              À régler : {fcfa(done.price)}. Aucun paiement en ligne n’a été
+              débité.
+            </p>
+            <p>
+              Code de remise : <strong className="mono">{done.otp}</strong>
+              <br />
+              <small className="muted">
+                À communiquer uniquement lors de la remise au destinataire.
+              </small>
+            </p>
+            <Link className="btn btn-accent" href={"/suivre?q=" + done.id}>
+              Suivre mon colis
+              <ArrowRight size={18} />
+            </Link>
+            <button className="btn" onClick={() => window.print()}>
+              Imprimer / Enregistrer en PDF
+            </button>
+            <button
+              className="text-button"
+              onClick={() => {
+                setDone(null);
+                setF(initial);
+                setStep(0);
+                setRequestId("");
+              }}
+            >
+              Préparer un autre envoi
+            </button>
           </div>
         </div>
       </section>
     );
-  }
-
-  const inp = (k: keyof Form, label: string, props: InputHTMLAttributes<HTMLInputElement> = {}) => (
-    <div className="field"><label htmlFor={'e-' + k}>{label}</label>
-      <input className={`in${props.type === 'number' ? ' mono' : ''}`} id={'e-' + k} value={f[k] as string | number}
-        onChange={ev => set(k, (props.type === 'number' ? +ev.target.value : ev.target.value) as never)} {...props} /></div>
-  );
-  const qSel = (k: 'fromQ' | 'toQ') => (
-    <div className="field"><label htmlFor={'e-' + k}>Quartier</label>
-      <select className="in" id={'e-' + k} value={f[k]} onChange={ev => set(k, ev.target.value)}>{QUARTIERS.map(n => <option key={n}>{n}</option>)}</select></div>
-  );
-  const city = (k: 'from' | 'to', label: string) => (
-    <div className="field"><label htmlFor={'e-' + k}>{label}</label>
-      <select className="in" id={'e-' + k} value={f[k]} onChange={ev => set(k, ev.target.value as AgencyCode)}>{AG_CODES.map(c => <option key={c} value={c}>{AG[c].name}</option>)}</select></div>
-  );
-  const contacts = (
-    <>
-      <div className="g2">
-        {inp('sender', 'Expéditeur', { placeholder: 'Nom ou entreprise' })}
-        {inp('senderTel', 'Téléphone expéditeur', { placeholder: '77 000 00 00', inputMode: 'tel' })}
-        {inp('recipient', 'Destinataire', { placeholder: 'Nom ou entreprise' })}
-        {inp('recipientTel', 'Téléphone destinataire', { placeholder: '77 000 00 00', inputMode: 'tel' })}
-      </div>
-      <div className="field"><label htmlFor="e-ch">Prévenir le destinataire par</label>
-        <select className="in" id="e-ch" value={f.channel} onChange={ev => set('channel', ev.target.value as Channel)}>
-          <option value="SMS">SMS</option><option value="EMAIL">E-mail</option><option value="CALL">Appel téléphonique</option></select></div>
-    </>
-  );
-  const payBox = (
-    <>
-      <div className="lab" style={{ margin: '16px 0 8px' }}>Paiement</div>
-      <div className="choices" style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))' }}>
-        {(['WAVE', 'OM', 'CARD', 'COD'] as Method[]).map(m => <Choice key={m} name="em" value={m} checked={method === m} onChange={v => setMethod(v as Method)} title={METHODS[m]} />)}
-      </div>
-      <button className="btn btn-accent" style={{ width: '100%', marginTop: 14 }} disabled={paying} onClick={submit}>
-        {paying ? <><span className="spin" /> Validation en cours…</> : method === 'COD' ? 'Confirmer la commande' : 'Payer et commander'}
-      </button>
-      <p className="muted" style={{ fontSize: 12, marginTop: 8, color: err ? 'var(--bad)' : undefined }}>{err}</p>
-    </>
-  );
-  const lines = (L: [string, number][]) => <div className="sum" style={{ fontSize: 13 }}>{L.map(l => <div key={l[0]}><span className="muted">{l[0]}</span><span className="mono">{nf(l[1])}</span></div>)}</div>;
-
   return (
     <section className="view">
-      <PageHead eyebrow="Envoyer" title="Envoyer un colis ou une marchandise"
-        lead="Indiquez le poids et la catégorie : nous proposons le transport adapté. Livraison express dans Dakar, fret routier entre nos agences, ou transport de masse par camion." />
-      <div className="wrap split">
-        <form className="card" autoComplete="off" onSubmit={ev => ev.preventDefault()}>
-          <fieldset className="fs"><legend>1. Votre envoi</legend>
-            <div className="g2">
-              {inp('weight', 'Poids total (kg)', { type: 'number', min: 0.1, step: 0.1 })}
-              {inp('desc', 'Nature de la marchandise', { placeholder: 'Ex. vêtements, ciment, poisson' })}
-            </div>
-            <p className="muted" style={{ fontSize: 13, marginTop: -4 }}>Soit {kgTxt(w)}.</p>
-            <CategoryPicker name="e" cons={f.cons} fragile={f.fragile} onChange={(cons, fragile) => setF(x => ({ ...x, cons, fragile }))} />
-          </fieldset>
-
-          <fieldset className="fs"><legend>2. Type de transport</legend>
-            {tooHeavy
-              ? <p className="errbox" style={{ marginTop: 0 }}>Au-delà de {kgTxt(T.masseMax)}, contactez-nous pour un transport sur mesure (plusieurs camions).</p>
-              : <ModePicker t={T} weight={w} mode={mode} onChange={setPicked} />}
-          </fieldset>
-
-          {!tooHeavy && mode === 'EXPRESS' && (
-            <>
-              <fieldset className="fs"><legend>3. Ramassage et livraison dans Dakar</legend>
-                <div className="g2">{qSel('fromQ')}{inp('fromNote', 'Repère de ramassage', { placeholder: 'Rue, immeuble, étage' })}{qSel('toQ')}{inp('toNote', 'Repère de livraison', { placeholder: 'Rue, immeuble, étage' })}</div>
-                <div className="g3">{inp('L', 'Longueur (cm)', { type: 'number', min: 1 })}{inp('W', 'Largeur (cm)', { type: 'number', min: 1 })}{inp('H', 'Hauteur (cm)', { type: 'number', min: 1 })}</div>
-                <div className="choices" style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))' }}>
-                  <Choice name="esp" value="EXPRESS" checked={f.service === 'EXPRESS'} onChange={() => set('service', 'EXPRESS')} title="Rapide" sub="Ramassage immédiat, livraison en moins de 2 h" />
-                  <Choice name="esp" value="STANDARD" checked={f.service === 'STANDARD'} onChange={() => set('service', 'STANDARD')} title="Standard" sub="Livraison dans la journée" />
+      <PageHead
+        eyebrow="LIVREX · Fret Express"
+        title="Un colis à envoyer ?"
+        lead="Dites-nous où il va. Nous vous guidons pour la suite."
+      />
+      <div className="wrap">
+        <Stepper
+          steps={[
+            "Le trajet",
+            "La marchandise",
+            "Les contacts",
+            "Confirmation",
+          ]}
+          current={step}
+        />
+        <div className="wizard-layout">
+          <form className="card wizard-form" onSubmit={next}>
+            {step === 0 && (
+              <>
+                <span className="form-section-icon">
+                  <MapPin />
+                </span>
+                <h2>Où doit-on l’emmener ?</h2>
+                <p className="muted">
+                  Choisissez le service qui correspond à votre trajet.
+                </p>
+                <div className="service-options">
+                  {(
+                    [
+                      {
+                        type: "EXPRESS",
+                        title: "Dans Dakar",
+                        sub: "Collecte et livraison à domicile",
+                        icon: Package,
+                      },
+                      {
+                        type: "FRET",
+                        title: "Entre les villes",
+                        sub: "Dépôt et retrait en agence",
+                        icon: MapPin,
+                      },
+                      {
+                        type: "MASSE",
+                        title: "Un camion dédié",
+                        sub: "Un transport pour vos gros volumes",
+                        icon: Truck,
+                      },
+                    ] as const
+                  ).map((x) => (
+                    <label
+                      key={x.type}
+                      className={
+                        "service-option " +
+                        (f.type === x.type ? "selected" : "")
+                      }
+                    >
+                      <input
+                        type="radio"
+                        name="send-mode"
+                        value={x.type}
+                        checked={f.type === x.type}
+                        onChange={() => set("type", x.type)}
+                      />
+                      <x.icon size={21} />
+                      <span>
+                        <strong>{x.title}</strong>
+                        <small>{x.sub}</small>
+                      </span>
+                    </label>
+                  ))}
                 </div>
-              </fieldset>
-              <fieldset className="fs"><legend>4. Contacts</legend>{contacts}</fieldset>
-            </>
-          )}
-
-          {!tooHeavy && mode === 'FRET' && (
-            <fieldset className="fs"><legend>3. Trajet entre agences</legend>
-              <div className="g2">{city('from', 'Agence de dépôt')}{city('to', "Agence d'arrivée")}</div>
-              <div className="choices" style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))' }}>
-                <Choice name="edl" value="retrait" checked={f.delivery === 'retrait'} onChange={() => set('delivery', 'retrait')} title="Retrait en agence" sub="Le destinataire vient avec sa pièce et son code" />
-                <Choice name="edl" value="livraison" checked={f.delivery === 'livraison'} onChange={() => set('delivery', 'livraison')} title="Livraison à domicile" sub="Dakar uniquement pour l’instant" />
-              </div>
-              <p className="note">Le fret routier se dépose au guichet : l&apos;agent pèse, emballe si besoin, encaisse et pose l&apos;étiquette. {f.from !== f.to && <>Agence de <b>{AG[f.from].name}</b> ({AG[f.from].site}), ouverte {AG[f.from].hours}.</>}</p>
-              {isCold(f.cons) && <p className="note">Produit {catLabel(f)} : transfert en véhicule réfrigéré uniquement.</p>}
-            </fieldset>
-          )}
-
-          {!tooHeavy && mode === 'MASSE' && (
-            <>
-              <fieldset className="fs"><legend>3. Enlèvement et livraison</legend>
                 <div className="g2">
-                  {city('from', "Ville d'enlèvement")}
-                  {inp('pickupAddr', "Adresse d'enlèvement", { placeholder: 'Entrepôt, usine, chantier…' })}
-                  {city('to', 'Ville de livraison')}
-                  {inp('dropAddr', 'Adresse de livraison', { placeholder: 'Quartier, repère' })}
+                  {f.type === "EXPRESS" ? (
+                    (["fromQ", "toQ"] as const).map((k, i) => (
+                      <div className="field" key={k}>
+                        <label htmlFor={"send-" + k}>
+                          {i ? "Quartier de livraison" : "Quartier de collecte"}
+                        </label>
+                        <select
+                          className="in"
+                          id={"send-" + k}
+                          value={f[k]}
+                          onChange={(e) => set(k, e.target.value)}
+                        >
+                          {QUARTIERS.map((q) => (
+                            <option key={q}>{q}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      {city("from", "Ville de départ")}
+                      {city("to", "Ville d’arrivée")}
+                    </>
+                  )}
                 </div>
-                <div className="g2">{inp('wanted', 'Date d’enlèvement souhaitée', { type: 'date', min: dIso(Date.now()) })}</div>
-                {isCold(f.cons) && <p className="note">Produit {catLabel(f)} : un camion frigorifique sera réservé.</p>}
-              </fieldset>
-              <fieldset className="fs"><legend>4. Contacts</legend>{contacts}</fieldset>
-            </>
-          )}
-        </form>
-
-        <div className="stack sticky">
-          {!tooHeavy && (
-            <div className="card">
-              <span className="eyebrow">{MODES[mode].label} · estimation immédiate</span>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', margin: '10px 0 14px' }}>
-                <div className="est-big">{total ? fcfa(total) : '—'}</div>
-                <div style={{ textAlign: 'right' }}>
-                  <div className="lab">{mode === 'EXPRESS' ? 'Arrivée estimée' : mode === 'MASSE' ? 'Durée indicative' : 'Délai'}</div>
-                  <b className="mono" style={{ fontSize: 18 }}>{mode === 'EXPRESS' ? exp.eta : mode === 'MASSE' ? `${masse.hours} h` : '48 à 72 h'}</b>
+                {f.type === "MASSE" && (
+                  <>
+                    <div className="g2">
+                      {field("pickupAddr", "Adresse d’enlèvement")}
+                      {field("dropAddr", "Adresse de livraison")}
+                    </div>
+                    {field("wanted", "Date souhaitée", "date", { min: today })}
+                  </>
+                )}
+                {f.type === "FRET" && (
+                  <p className="note">
+                    Votre colis sera déposé à l’agence de {AG[f.from].name} et
+                    retiré à celle de {AG[f.to].name}.
+                  </p>
+                )}
+              </>
+            )}
+            {step === 1 && (
+              <>
+                <span className="form-section-icon">
+                  <Package />
+                </span>
+                <h2>Parlez-nous de votre colis.</h2>
+                <p className="muted">
+                  Ces informations permettent de préparer sa prise en charge.
+                </p>
+                {field("desc", "Que contient votre envoi ?", "text", {
+                  placeholder:
+                    "Ex. vêtements, documents, produits alimentaires",
+                  minLength: 2,
+                  maxLength: 500,
+                })}
+                <div className="g2">
+                  {field("weight", "Poids total (kg)", "number", {
+                    min: 0.1,
+                    step: 0.1,
+                    max: 30000,
+                  })}
+                  <div className="field">
+                    <label htmlFor="send-cons">Conservation</label>
+                    <select
+                      id="send-cons"
+                      className="in"
+                      value={f.cons}
+                      onChange={(e) => set("cons", e.target.value as Cons)}
+                    >
+                      {Object.entries(CONS).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
-              {mode === 'EXPRESS' && (
-                <>
-                  <div className="est-row">
-                    <div><small>Poids réel</small><b>{kgTxt(w)}</b></div>
-                    <div><small>Volumétrique</small><b>{exp.vol.toLocaleString('fr-FR')} kg</b></div>
-                    <div><small>Distance</small><b>{exp.km.toLocaleString('fr-FR')} km</b></div>
+                <label className="check large-check">
+                  <input
+                    type="checkbox"
+                    checked={f.fragile}
+                    onChange={(e) => set("fragile", e.target.checked)}
+                  />
+                  <span>
+                    <strong>Mon colis est fragile</strong>
+                    <small>
+                      Par exemple : verre, vaisselle ou matériel électronique.
+                    </small>
+                  </span>
+                </label>
+                {f.type === "EXPRESS" && (
+                  <>
+                    <p className="lab">Dimensions de l’emballage</p>
+                    <div className="g3">
+                      {field("L", "Longueur (cm)", "number", {
+                        min: 1,
+                        max: 300,
+                      })}
+                      {field("W", "Largeur (cm)", "number", {
+                        min: 1,
+                        max: 300,
+                      })}
+                      {field("H", "Hauteur (cm)", "number", {
+                        min: 1,
+                        max: 300,
+                      })}
+                    </div>
+                    <div className="field">
+                      <label htmlFor="send-service">Vitesse de livraison</label>
+                      <select
+                        className="in"
+                        id="send-service"
+                        value={f.service}
+                        onChange={(e) =>
+                          set("service", e.target.value as Draft["service"])
+                        }
+                      >
+                        <option value="STANDARD">Standard</option>
+                        <option value="EXPRESS">Express</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+            {step === 2 && (
+              <>
+                <span className="form-section-icon">
+                  <ShieldCheck />
+                </span>
+                <h2>Qui envoie ? Qui reçoit ?</h2>
+                <p className="muted">
+                  L’équipe utilisera ces coordonnées pour organiser la remise.
+                </p>
+                <fieldset className="stack">
+                  <legend>Expéditeur</legend>
+                  <div className="g2">
+                    {field("sender", "Nom de l’expéditeur", "text", {
+                      autoComplete: "name",
+                      minLength: 2,
+                    })}
+                    {field("senderTel", "Téléphone de l’expéditeur", "tel", {
+                      placeholder: "77 123 45 67",
+                      pattern: "[+0-9 ()-]{9,20}",
+                      autoComplete: "tel",
+                    })}
                   </div>
-                  <div style={{ margin: '14px 0' }}>
-                    <MapCanvas scene={{ mode: 'dkr', routes: [[qp(f.fromQ), qp(f.toQ)]], points: [{ ...qp(f.fromQ), kind: 'pick' }, { ...qp(f.toQ), kind: 'drop' }] }} />
+                </fieldset>
+                <fieldset className="stack">
+                  <legend>Destinataire</legend>
+                  <div className="g2">
+                    {field("recipient", "Nom du destinataire", "text", {
+                      minLength: 2,
+                    })}
+                    {field("recipientTel", "Téléphone du destinataire", "tel", {
+                      placeholder: "77 123 45 67",
+                      pattern: "[+0-9 ()-]{9,20}",
+                    })}
                   </div>
-                  {lines(exp.lines)}
-                  {payBox}
-                </>
+                </fieldset>
+              </>
+            )}
+            {step === 3 && (
+              <>
+                <span className="form-section-icon">
+                  <Check />
+                </span>
+                <h2>Tout est bon pour vous ?</h2>
+                <p className="muted">
+                  Vérifiez les informations avant de confirmer.
+                </p>
+                <dl className="review-list">
+                  <div>
+                    <dt>Trajet</dt>
+                    <dd>
+                      {f.type === "EXPRESS" ? f.fromQ : AG[f.from].name} →{" "}
+                      {f.type === "EXPRESS" ? f.toQ : AG[f.to].name}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Marchandise</dt>
+                    <dd>
+                      {f.desc} · {f.weight} kg · {CONS[f.cons].label}
+                      {f.fragile ? " · Fragile" : ""}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Expéditeur</dt>
+                    <dd>
+                      {f.sender} · {f.senderTel}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Destinataire</dt>
+                    <dd>
+                      {f.recipient} · {f.recipientTel}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Paiement</dt>
+                    <dd>En agence · {fcfa(price.total)}</dd>
+                  </div>
+                </dl>
+                <p className="note">
+                  Vous réglez auprès de l’équipe. Les paiements en ligne seront
+                  disponibles après activation des prestataires.
+                </p>
+                {!user && (
+                  <div className="login-callout">
+                    <h3>Une dernière étape : votre compte.</h3>
+                    <p>Votre envoi vous attendra ici après la connexion.</p>
+                    <Link
+                      href="/connexion?next=/envoyer"
+                      className="btn btn-accent"
+                    >
+                      Me connecter pour confirmer
+                      <ArrowRight size={18} />
+                    </Link>
+                  </div>
+                )}
+              </>
+            )}
+            {error && (
+              <p className="errbox" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="wizard-actions">
+              {step > 0 && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setStep(step - 1);
+                    setError("");
+                  }}
+                >
+                  <ArrowLeft size={17} />
+                  Retour
+                </button>
               )}
-              {mode === 'FRET' && (fret ? (
-                <>
-                  <div className="est-row">
-                    <div><small>Poids</small><b>{kgTxt(w)}</b></div>
-                    <div><small>Distance</small><b>{fret.km} km</b></div>
-                    <div><small>Catégorie</small><b>{catLabel(f)}</b></div>
-                  </div>
-                  <div style={{ margin: '14px 0' }}><MapCanvas scene={{ mode: 'sn', points: agencyPts(), routes: [[AG[f.from], AG[f.to]]] }} /></div>
-                  {lines(fret.lines)}
-                  <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>Emballage fourni par l&apos;agence en supplément ({fcfa(T.pack)}) si nécessaire. Paiement au guichet.</p>
-                </>
-              ) : <p className="muted">Choisissez deux agences différentes.</p>)}
-              {mode === 'MASSE' && (
-                <>
-                  <div className="est-row">
-                    <div><small>Facturé</small><b>{masse.tonnes.toLocaleString('fr-FR')} t</b></div>
-                    <div><small>Distance</small><b>{masse.km} km</b></div>
-                    <div><small>Camion</small><b>{isCold(f.cons) ? 'Frigorifique' : 'Porteur'}</b></div>
-                  </div>
-                  <div style={{ margin: '14px 0' }}><MapCanvas scene={{ mode: 'sn', points: agencyPts(), routes: [[AG[f.from], AG[f.to]]] }} /></div>
-                  {lines(masse.lines)}
-                  {payBox}
-                </>
+              {step < 3 ? (
+                <button className="btn btn-accent" type="submit">
+                  Continuer
+                  <ArrowRight size={18} />
+                </button>
+              ) : (
+                user && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="btn btn-accent"
+                    onClick={confirm}
+                  >
+                    {busy ? "Enregistrement…" : "Confirmer mon envoi"}
+                    <Check size={18} />
+                  </button>
+                )
               )}
             </div>
-          )}
-
-          <div className="card">
-            <div className="card-h"><h3>Vous vendez en ligne ?</h3><span className="eyebrow">API e-commerce</span></div>
-            <p className="muted" style={{ fontSize: 14, marginBottom: 12 }}>Créez vos envois express depuis votre boutique et recevez les statuts automatiquement.</p>
-            <pre className="code"><span className="k">POST</span> /api/v1/shipments{'\n'}{'{'} &quot;pickup&quot;: &quot;Plateau&quot;, &quot;dropoff&quot;: &quot;Almadies&quot;,{'\n'}  &quot;weight_kg&quot;: 2.4, &quot;conservation&quot;: &quot;sec&quot;,{'\n'}  &quot;fragile&quot;: false, &quot;service&quot;: &quot;express&quot;,{'\n'}  &quot;recipient&quot;: {'{'} &quot;phone&quot;: &quot;77 000 00 00&quot; {'}'} {'}'}</pre>
-            <Link className="btn btn-sm" href="/admin?tab=api" style={{ marginTop: 12 }}>Essayer l&apos;API</Link>
-          </div>
+          </form>
+          <aside className="card quote-card">
+            <span className="section-tag">VOTRE ENVOI, EN UN COUP D’ŒIL</span>
+            <h3>
+              {f.type === "EXPRESS"
+                ? "Livraison dans Dakar"
+                : f.type === "FRET"
+                  ? "Fret entre agences"
+                  : "Camion dédié"}
+            </h3>
+            <div className="quote-route">
+              <span className="route-dot" />
+              {f.type === "EXPRESS" ? f.fromQ : AG[f.from].name}
+              <span className="route-line" />
+              <span className="route-dot end" />
+              {f.type === "EXPRESS" ? f.toQ : AG[f.to].name}
+            </div>
+            <div className="quote-total">
+              <small>Prix estimé</small>
+              <strong>{fcfa(price.total)}</strong>
+              <span>
+                {f.weight} kg · {CONS[f.cons].label}
+              </span>
+            </div>
+            <details className="quote-details">
+              <summary>Détail du prix</summary>
+              {price.lines.map(([l, n]) => (
+                <div key={l}>
+                  <span>{l}</span>
+                  <b>{fcfa(n)}</b>
+                </div>
+              ))}
+            </details>
+            <p className="quote-note">
+              <ShieldCheck size={18} />
+              Le prix est vérifié à la confirmation. Aucun débit en ligne.
+            </p>
+          </aside>
         </div>
       </div>
     </section>

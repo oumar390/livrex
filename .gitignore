@@ -5,3 +5,7 @@ out/
 .env*.local
 npm-debug.log*
 .DS_Store
+
+.data/
+playwright-report/
+test-results/

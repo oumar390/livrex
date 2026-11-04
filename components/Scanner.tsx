@@ -1,68 +1,131 @@
-'use client';
-
-import { useEffect, useRef, useState } from 'react';
-
-interface Detector { detect: (src: HTMLVideoElement) => Promise<{ rawValue: string }[]> }
+"use client";
+import { useEffect, useRef, useState } from "react";
+interface Detector {
+  detect: (src: HTMLVideoElement) => Promise<{ rawValue: string }[]>;
+}
 type DetectorCtor = new (o: { formats: string[] }) => Detector;
-
-/**
- * Scanner de QR code / code-barres.
- * Utilise la caméra et l'API BarcodeDetector quand le navigateur la propose (Chrome Android),
- * sinon simule la lecture du code attendu après un court délai.
- */
-export default function Scanner({ expected, onRead, onCancel }: { expected: string; onRead: (code: string) => void; onCancel: () => void }) {
-  const video = useRef<HTMLVideoElement>(null);
-  const [mode, setMode] = useState<'sim' | 'cam'>('sim');
-  const [msg, setMsg] = useState('Simulation de scan · visez le QR code');
-  const done = useRef(false);
-  const cb = useRef(onRead);
-  cb.current = onRead;
-
-  // Simulation : le code attendu est « lu » au bout de 1,7 s
+export default function Scanner({
+  expected,
+  onRead,
+  onCancel,
+}: {
+  expected: string;
+  onRead: (code: string) => void;
+  onCancel: () => void;
+}) {
+  const video = useRef<HTMLVideoElement>(null),
+    cb = useRef(onRead),
+    done = useRef(false);
+  const [mode, setMode] = useState<"manual" | "camera">("manual"),
+    [input, setInput] = useState(""),
+    [message, setMessage] = useState("");
   useEffect(() => {
-    if (mode !== 'sim') return;
-    const t = setTimeout(() => { if (!done.current) { done.current = true; cb.current(expected); } }, 1700);
-    return () => clearTimeout(t);
-  }, [mode, expected]);
-
+    cb.current = onRead;
+  }, [onRead]);
   useEffect(() => {
-    if (mode !== 'cam') return;
-    let stream: MediaStream | null = null, raf = 0, live = true;
-    const Ctor = (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector!;
-    const det = new Ctor({ formats: ['qr_code', 'code_128'] });
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(s => {
-      if (!live) { s.getTracks().forEach(t => t.stop()); return; }
-      stream = s;
-      const v = video.current!;
-      v.srcObject = s;
-      v.play();
-      setMsg('Visez le QR code ou le code-barres');
-      const loop = async () => {
-        if (!live || done.current) return;
-        try {
-          const r = await det.detect(v);
-          if (r[0]) { done.current = true; cb.current(r[0].rawValue); return; }
-        } catch { /* image pas prête */ }
-        raf = requestAnimationFrame(loop);
-      };
-      loop();
-    }).catch(() => { setMsg('Caméra refusée · simulation'); setMode('sim'); });
-    return () => { live = false; cancelAnimationFrame(raf); stream?.getTracks().forEach(t => t.stop()); };
+    if (mode !== "camera") return;
+    let live = true,
+      raf = 0,
+      stream: MediaStream | null = null;
+    const Ctor = (window as unknown as { BarcodeDetector?: DetectorCtor })
+      .BarcodeDetector;
+    if (!Ctor || !navigator.mediaDevices) return;
+    const detector = new Ctor({ formats: ["qr_code", "code_128"] });
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" } })
+      .then(async (s) => {
+        if (!live) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        stream = s;
+        const v = video.current!;
+        v.srcObject = s;
+        await v.play();
+        async function loop() {
+          if (!live || done.current) return;
+          try {
+            const result = await detector.detect(v);
+            if (result[0]) {
+              done.current = true;
+              cb.current(result[0].rawValue);
+              return;
+            }
+          } catch {}
+          raf = requestAnimationFrame(loop);
+        }
+        loop();
+      })
+      .catch(() => {
+        setMessage("Accès à la caméra refusé. Saisissez le numéro du colis.");
+        setMode("manual");
+      });
+    return () => {
+      live = false;
+      cancelAnimationFrame(raf);
+      stream?.getTracks().forEach((t) => t.stop());
+    };
   }, [mode]);
-
-  const canCam = typeof window !== 'undefined' && 'BarcodeDetector' in window && !!navigator.mediaDevices;
-
   return (
-    <>
-      <div className="scanner">
-        {mode === 'cam' && <video ref={video} muted playsInline style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-        <div className="frame" />
-        <p>{msg}</p>
-      </div>
+    <div className="stack">
+      {mode === "camera" && (
+        <div className="scanner">
+          <video
+            ref={video}
+            muted
+            playsInline
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+          <div className="frame" style={{ position: "absolute" }} />
+        </div>
+      )}
+      <p className="note">
+        Scannez l’étiquette ou saisissez le numéro imprimé sous le code-barres.
+      </p>
+      <form
+        className="stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (input.trim().toUpperCase() !== expected)
+            return setMessage("Ce numéro ne correspond pas au colis attendu.");
+          onRead(input.trim().toUpperCase());
+        }}
+      >
+        <label className="field">
+          Numéro sur l’étiquette
+          <input
+            className="in mono"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            required
+            autoComplete="off"
+          />
+        </label>
+        <button className="btn btn-accent">Valider le numéro</button>
+      </form>
+      {message && (
+        <p role="status" className="note">
+          {message}
+        </p>
+      )}
       <div className="row">
-        {canCam && mode === 'sim' && <button className="btn btn-sm" onClick={() => { done.current = false; setMode('cam'); }}>Utiliser la caméra</button>}
-        <button className="btn btn-sm" onClick={onCancel}>Annuler</button>
+        <button
+          className="btn"
+          onClick={() => {
+            if (!("BarcodeDetector" in window) || !navigator.mediaDevices) {
+              setMessage("Scan caméra indisponible. Saisissez le numéro.");
+              return;
+            }
+            done.current = false;
+            setMode(mode === "camera" ? "manual" : "camera");
+          }}
+        >
+          {mode === "camera" ? "Fermer la caméra" : "Utiliser la caméra"}
+        </button>
+        <button className="btn" onClick={onCancel}>
+          Annuler
+        </button>
       </div>
-    </>
+    </div>
   );
 }
