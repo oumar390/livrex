@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 import Link from "next/link";
 import { useState } from "react";
 import {
@@ -130,7 +131,7 @@ export default function Send() {
     try {
       const id = requestId || crypto.randomUUID();
       setRequestId(id);
-      const r = await fetch("/api/parcels", {
+      const r = await apiFetch("/api/parcels", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

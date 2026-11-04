@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 import { useState, useEffect } from "react";
 import { PageHead } from "@/components/ui";
 import { ROLES, ROLE_LABELS, type User, type Role } from "@/lib/auth-types";
@@ -7,7 +8,7 @@ export default function Team() {
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
   const load = () =>
-    fetch("/api/team")
+    apiFetch("/api/team")
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) throw Error(d.error);
@@ -20,7 +21,7 @@ export default function Team() {
   async function change(id: string, role: Role) {
     setError("");
     setMessage("");
-    const r = await fetch("/api/team", {
+    const r = await apiFetch("/api/team", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, role }),

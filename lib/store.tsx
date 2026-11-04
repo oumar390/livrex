@@ -1,5 +1,10 @@
 "use client";
 import {
+  apiFetch,
+  configureDemoMode,
+  resetBrowserDemo,
+} from "@/lib/client-api";
+import {
   createContext,
   useCallback,
   useContext,
@@ -18,6 +23,7 @@ interface Toast {
 }
 interface Store {
   S: AppState;
+  demo: boolean;
   user: User | null;
   rev: number;
   act: <T>(fn: (c: Ctx) => T) => T;
@@ -45,7 +51,7 @@ function createEngine() {
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((fn) => fn());
   async function refresh() {
-    const r = await fetch("/api/state", { cache: "no-store" });
+    const r = await apiFetch("/api/state", { cache: "no-store" });
     if (!r.ok) {
       const problem = await r.json().catch(() => ({}));
       throw Error(problem.error || "Connexion au serveur indisponible.");
@@ -82,7 +88,7 @@ function createEngine() {
     queue = queue.then(async () => {
       try {
         if (blocked) return;
-        const r = await fetch("/api/state", {
+        const r = await apiFetch("/api/state", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ S: data, revision }),
@@ -134,7 +140,13 @@ function createEngine() {
 }
 const Context = createContext<Store | null>(null);
 const serverSnapshot = () => null;
-export function StoreProvider({ children }: { children: ReactNode }) {
+export function StoreProvider({
+  children,
+  demoMode = false,
+}: {
+  children: ReactNode;
+  demoMode?: boolean;
+}) {
   const [engine] = useState(createEngine),
     data = useSyncExternalStore(
       engine.subscribe,
@@ -150,10 +162,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
   }, []);
   useEffect(() => {
-    engine.refresh().catch((e) => setError(e.message));
+    configureDemoMode(demoMode);
+    engine.reload().catch((e) => setError(e.message));
     const t = setInterval(() => engine.refresh().catch(() => {}), 5000);
     return () => clearInterval(t);
-  }, [engine]);
+  }, [engine, demoMode]);
   useEffect(() => {
     const close = (e: KeyboardEvent) => {
       if (e.key === "Escape") setDrawer(null);
@@ -164,6 +177,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Store | null = data
     ? {
         S: data.S,
+        demo: demoMode,
         user: data.user,
         rev: data.rev,
         act: (fn) => engine.act(fn, toast),
@@ -181,6 +195,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     : null;
   return (
     <Context.Provider value={value}>
+      {demoMode && (
+        <div className="demo-notice no-print">
+          <div>
+            <strong>Mode démo</strong>
+            <span>
+              Données fictives, conservées uniquement dans ce navigateur. Aucun
+              paiement ni envoi réel.
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Réinitialiser uniquement les données de démonstration de ce navigateur ?",
+                )
+              ) {
+                resetBrowserDemo();
+                engine.reload().catch((e) => setError(e.message));
+              }
+            }}
+          >
+            Réinitialiser la démo
+          </button>
+        </div>
+      )}
       {(error || data?.error) && (
         <div className="save-error" role="alert">
           {error || data?.error}

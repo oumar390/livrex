@@ -1,3 +1,5 @@
+import { isDemoRuntime } from "@/lib/server/runtime";
+export const dynamic = "force-dynamic";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Header from "@/components/Header";
@@ -24,7 +26,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="fr" data-scroll-behavior="smooth">
       <body>
         <Header />
-        <StoreProvider>
+        <StoreProvider demoMode={isDemoRuntime()}>
           <main id="contenu">{children}</main>
         </StoreProvider>
       </body>

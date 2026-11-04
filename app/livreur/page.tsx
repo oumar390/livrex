@@ -25,12 +25,14 @@ function Geofence({
   here,
   there,
   onJump,
+  demo = false,
 }: {
   near: boolean;
   km: number;
   here: string;
   there: string;
   onJump: () => void;
+  demo?: boolean;
 }) {
   if (near)
     return (
@@ -63,14 +65,14 @@ function Geofence({
         onClick={onJump}
         title="Utiliser la position GPS de mon téléphone"
       >
-        Actualiser ma position GPS
+        {demo ? "Simuler mon arrivée" : "Actualiser ma position GPS"}
       </button>
     </div>
   );
 }
 
 export default function Livreur() {
-  const { S, act } = useStore();
+  const { S, act, demo } = useStore();
   const [clock] = useState(() => Date.now());
   const [cid, setCid] = useState("L1");
   const [scan, setScan] = useState(false);
@@ -97,6 +99,11 @@ export default function Livreur() {
   const near = km <= GEOFENCE_KM;
   const meters = Math.round(km * 1000);
   const jump = () => {
+    if (demo && p) {
+      act((ctx) => teleportCourier(ctx, p));
+      setErr("");
+      return;
+    }
     if (!navigator.geolocation)
       return setErr("La géolocalisation n’est pas disponible.");
     navigator.geolocation.getCurrentPosition(
@@ -310,6 +317,7 @@ export default function Livreur() {
                   ) : (
                     <>
                       <Geofence
+                        demo={demo}
                         near={near}
                         km={km}
                         here="Vous êtes au point de ramassage."
@@ -337,6 +345,7 @@ export default function Livreur() {
                 {p.status === ST.DELIV && (
                   <>
                     <Geofence
+                      demo={demo}
                       near={near}
                       km={km}
                       here="Vous êtes chez le destinataire."

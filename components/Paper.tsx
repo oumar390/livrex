@@ -1,15 +1,17 @@
 "use client";
 
+import { useStore } from "@/lib/store";
 import { AG, catLabel, kgTxt, MODES } from "@/lib/data";
 import { dfmt, fcfa } from "@/lib/format";
 import type { Booking, Parcel } from "@/lib/types";
 import { Barcode, QR } from "./Codes";
 
 function PaperTop({ title }: { title: string }) {
+  const { demo } = useStore();
   return (
     <div className="paper-top">
       <img src="/logo-dark.png" alt="Afrique Express Services" />
-      <span>{title}</span>
+      <span>{demo ? "DÉMONSTRATION · DOCUMENT NON VALABLE" : title}</span>
     </div>
   );
 }

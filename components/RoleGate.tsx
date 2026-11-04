@@ -1,3 +1,4 @@
+import { isDemoRuntime } from "@/lib/server/runtime";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { currentUser } from "@/lib/server/auth";
@@ -9,6 +10,7 @@ export default async function RoleGate({
   roles: Role[];
   children: React.ReactNode;
 }) {
+  if (isDemoRuntime()) return children;
   const u = await currentUser();
   if (!u) redirect("/connexion?next=/pro");
   if (u.role !== "ADMIN" && !roles.includes(u.role))

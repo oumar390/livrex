@@ -2,6 +2,12 @@
 
 Le code est prévu pour le PostgreSQL de Supabase. Supabase conserve les comptes, sessions, réservations, colis et preuves de livraison. L’authentification LIVREX est gérée par le serveur de l’application : Supabase Auth n’est pas utilisé. Les images sont enregistrées dans PostgreSQL ; aucun bucket Storage ni clé `service_role` n’est nécessaire.
 
+## Tester immédiatement, sans base
+
+Importer la branche `codex/livrex-mobile-platform` dans Vercel et la déployer sans `DATABASE_URL`. Le site fonctionne alors en **mode démo**, avec un bandeau explicite, des exemples fictifs et un stockage propre à chaque navigateur. Les visiteurs peuvent parcourir les espaces et simuler les opérations sans mot de passe. Aucun colis, paiement ou billet réel n’est créé. Aucune variable d’environnement n’est nécessaire pour ce mode.
+
+Pour passer ensuite au service connecté, suivre les étapes ci-dessous. Les exemples de démonstration ne sont pas importés dans Supabase. La connexion d’une vraie base désactive automatiquement le mode démo.
+
 ## 1. Créer Supabase
 
 1. Créer un projet dans [Supabase](https://supabase.com/dashboard).
@@ -41,7 +47,7 @@ npm ci
 npm run db:migrate
 ```
 
-Il n’est pas nécessaire de faire accéder le build Vercel à la base. Les accès à la base sont initialisés à l’exécution. Les erreurs de configuration ne sont jamais remplacées silencieusement par un SQLite temporaire sur Vercel.
+Il n’est pas nécessaire de faire accéder le build Vercel à la base. Les accès à la base sont initialisés à l’exécution. Sans base, seule la démonstration dans le navigateur est disponible. Les routes API réelles répondent par une erreur de configuration et ne créent jamais de SQLite temporaire sur Vercel. Une URI configurée mais invalide ne déclenche pas de mode démo silencieux.
 
 ## 4. Créer l’administrateur
 

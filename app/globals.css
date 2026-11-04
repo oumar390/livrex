@@ -4058,3 +4058,4 @@ a {
     font-size: 8px;
   }
 }
+.demo-notice{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px max(22px,calc((100vw - 1156px)/2));background:#fff3d8;color:#73541e;border-bottom:1px solid #ebd8aa;font-size:12px}.demo-notice>div{display:flex;align-items:center;gap:12px}.demo-notice strong{white-space:nowrap;font-size:11px;text-transform:uppercase;letter-spacing:.5px}.demo-notice button{border:1px solid #dcc899;background:#fff9ec;border-radius:8px;padding:6px 10px;font-size:11px;white-space:nowrap;cursor:pointer;min-height:36px}@media(max-width:760px){.demo-notice{padding:12px 22px;align-items:start;gap:10px}.demo-notice>div{flex-direction:column;align-items:start;gap:3px}.demo-notice span{font-size:10px;line-height:1.5}.demo-notice button{white-space:normal;max-width:110px;min-width:85px;font-size:10px}}

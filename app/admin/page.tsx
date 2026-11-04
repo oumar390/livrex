@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -894,7 +895,7 @@ function Bookings() {
                             )
                           )
                             return;
-                          const r = await fetch("/api/bookings/payment", {
+                          const r = await apiFetch("/api/bookings/payment", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ id: b.id }),
@@ -1226,8 +1227,7 @@ function Pricing() {
         </div>
 
         <p className="note">
-          Les barèmes sont provisoires. Ils
-          restent à fixer avec la direction.
+          Les barèmes sont provisoires. Ils restent à fixer avec la direction.
         </p>
       </div>
     </div>

@@ -1,10 +1,11 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { PageHead } from "@/components/ui";
 import { useStore } from "@/lib/store";
 export default function Integrations() {
-  const { user } = useStore();
+  const { user, demo } = useStore();
   const [keys, setKeys] = useState<
       { id: string; name: string; created: number }[]
     >([]),
@@ -12,7 +13,7 @@ export default function Integrations() {
     [token, setToken] = useState(""),
     [error, setError] = useState("");
   const load = () =>
-    fetch("/api/keys")
+    apiFetch("/api/keys")
       .then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d)) setKeys(d);
@@ -20,6 +21,21 @@ export default function Integrations() {
   useEffect(() => {
     if (user) load();
   }, [user]);
+  if (demo)
+    return (
+      <section className="view">
+        <PageHead
+          eyebrow="Démonstration"
+          title="L’API sera disponible avec Supabase"
+          lead="Explorez les envois dans l’application. Les clés d’accès externes seront activées après connexion de la base."
+        />
+        <div className="wrap">
+          <Link className="btn btn-accent" href="/envoyer">
+            Simuler un envoi
+          </Link>
+        </div>
+      </section>
+    );
   return (
     <section className="view">
       <PageHead
@@ -39,7 +55,7 @@ export default function Integrations() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 setError("");
-                const r = await fetch("/api/keys", {
+                const r = await apiFetch("/api/keys", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ name }),
@@ -102,7 +118,7 @@ export default function Integrations() {
                       className="btn btn-sm"
                       onClick={async () => {
                         if (!confirm("Révoquer cette clé ?")) return;
-                        await fetch("/api/keys", {
+                        await apiFetch("/api/keys", {
                           method: "DELETE",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ id: k.id }),

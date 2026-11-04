@@ -2,6 +2,16 @@
 
 Application Next.js pour les voyages, les envois de marchandises et les opérations des équipes. Interface française conçue pour le téléphone, puis adaptée à la tablette et à l’ordinateur.
 
+## Explorer sans base de données
+
+Sur Vercel, sans `DATABASE_URL`, l’interface démarre automatiquement en **mode démo navigateur**. Aucune connexion Supabase ni création de compte n’est nécessaire. Un bandeau distingue ce mode : les exemples et les simulations restent dans le stockage du navigateur, séparément pour chaque visiteur. Les billets et bordereaux de démonstration ne sont pas valables. La réinitialisation de la démo n’affecte aucune base réelle.
+
+Les appels serveur de données restent protégés : le mode démo ne crée aucun SQLite temporaire sur Vercel et ne simule aucune session serveur. Les clés API externes sont désactivées. Utiliser uniquement des coordonnées fictives. Les simulations ne seront pas transférées automatiquement vers Supabase.
+
+Pour explorer ce mode localement sans utiliser la base SQLite existante : `LIVREX_DEMO_MODE=1 npm run dev` (avec `DATABASE_URL` absent). Dès qu’une vraie `DATABASE_URL` est configurée, le mode démo est désactivé et les accès serveur habituels reprennent.
+
+`npm run test:demo` vérifie le mode sans base sur la compilation existante : envoi, persistance locale, documents marqués, espaces professionnels, isolation des visiteurs, réinitialisation et absence d’appel aux API.
+
 ## Supabase et Vercel
 
 La version hébergée utilise PostgreSQL avec Supabase. Suivre le [guide Supabase + Vercel](docs/SUPABASE_VERCEL.md) : créer le projet Supabase, définir `DATABASE_URL` et `ADMIN_SETUP_TOKEN` dans Vercel, puis déployer la branche `codex/livrex-mobile-platform`. Les migrations sont idempotentes et la première création d’administrateur est protégée par le code privé en hébergement. Aucun secret ne doit être ajouté au dépôt.

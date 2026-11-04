@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
@@ -6,7 +7,7 @@ import { ROLE_LABELS } from "@/lib/auth-types";
 import { PageHead } from "@/components/ui";
 import { UserRound, ArrowRight, LogOut, BriefcaseBusiness } from "lucide-react";
 export default function Account() {
-  const { user, refresh } = useStore();
+  const { user, refresh, demo } = useStore();
   const router = useRouter();
   return (
     <section className="view">
@@ -19,6 +20,12 @@ export default function Account() {
         <div className="card stack">
           <UserRound size={32} />
           <h2>{user ? user.name : "Bienvenue sur LIVREX"}</h2>
+          {demo && (
+            <p className="note">
+              Compte fictif de démonstration. Aucun mot de passe et aucune
+              donnée partagée avec les autres visiteurs.
+            </p>
+          )}
           {user ? (
             <>
               <p>{user.email}</p>
@@ -36,17 +43,19 @@ export default function Account() {
                   Mon espace professionnel
                 </Link>
               )}
-              <button
-                className="btn"
-                onClick={async () => {
-                  await fetch("/api/auth", { method: "DELETE" });
-                  await refresh();
-                  router.refresh();
-                }}
-              >
-                <LogOut size={18} />
-                Me déconnecter
-              </button>
+              {!demo && (
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    await apiFetch("/api/auth", { method: "DELETE" });
+                    await refresh();
+                    router.refresh();
+                  }}
+                >
+                  <LogOut size={18} />
+                  Me déconnecter
+                </button>
+              )}
             </>
           ) : (
             <>

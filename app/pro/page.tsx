@@ -1,3 +1,4 @@
+import { isDemoRuntime } from "@/lib/server/runtime";
 import Link from "next/link";
 import { currentUser } from "@/lib/server/auth";
 import { ROLE_LABELS, ROLE_PATH, type Role } from "@/lib/auth-types";
@@ -50,7 +51,14 @@ const spaces: {
   },
 ];
 export default async function Pro() {
-  const u = await currentUser();
+  const u = isDemoRuntime()
+    ? {
+        id: "demo-admin",
+        name: "Visiteur démo",
+        email: "demo@example.test",
+        role: "ADMIN" as const,
+      }
+    : await currentUser();
   const available = spaces.filter(
     (s) => u && (u.role === "ADMIN" || u.role === s.role),
   );

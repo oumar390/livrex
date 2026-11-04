@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -7,14 +8,14 @@ import { useStore } from "@/lib/store";
 function Form() {
   const params = useSearchParams(),
     router = useRouter();
-  const { refresh } = useStore();
+  const { refresh, demo } = useStore();
   const [register, setRegister] = useState(false),
     [setup, setSetup] = useState(false),
     [needsToken, setNeedsToken] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
-    fetch("/api/auth")
+    apiFetch("/api/auth")
       .then((r) => r.json())
       .then((d) => {
         setSetup(d.needsSetup);
@@ -28,7 +29,7 @@ function Form() {
     setBusy(true);
     const data = new FormData(e.currentTarget);
     try {
-      const r = await fetch("/api/auth", {
+      const r = await apiFetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -57,6 +58,25 @@ function Form() {
       setBusy(false);
     }
   }
+  if (demo)
+    return (
+      <section className="wrap empty-state">
+        <ShieldCheck size={38} />
+        <h1>Explorez LIVREX, simplement.</h1>
+        <p>
+          Aucun compte à créer dans cette démonstration. Utilisez des
+          informations fictives ; tout reste dans votre navigateur.
+        </p>
+        <div className="row">
+          <Link className="btn btn-accent" href="/activites">
+            Mes activités de démonstration
+          </Link>
+          <Link className="btn" href="/pro">
+            Explorer les espaces professionnels
+          </Link>
+        </div>
+      </section>
+    );
   return (
     <section className="auth-layout wrap">
       <div className="auth-intro">

@@ -1,4 +1,5 @@
 "use client";
+import { apiFetch } from "@/lib/client-api";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -189,7 +190,7 @@ export default function Voyager() {
     setPaying(true);
     try {
       requestKey.current ||= crypto.randomUUID();
-      const r = await fetch("/api/bookings", {
+      const r = await apiFetch("/api/bookings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
