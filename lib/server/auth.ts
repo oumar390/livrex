@@ -6,7 +6,7 @@ import {
   timingSafeEqual,
   createHash,
 } from "node:crypto";
-import { db } from "./db";
+import { db, DatabaseConfigurationError } from "./db";
 import type { User, Role } from "../auth-types";
 export const COOKIE = "livrex_session";
 export const digest = (s: string) =>
@@ -25,11 +25,11 @@ export async function currentUser(): Promise<User | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   return (
-    (db
+    ((await db
       .prepare(
         "SELECT u.id,u.name,u.email,u.role FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.token=? AND s.expires>?",
       )
-      .get(digest(token), Date.now()) as unknown as User) || null
+      .get(digest(token), Date.now())) as unknown as User) || null
   );
 }
 export async function requireUser(roles?: Role[]) {
@@ -53,6 +53,8 @@ export function sameOrigin(req: Request) {
     throw new ApiError(403, "Origine de la requête refusée.");
 }
 export function failure(e: unknown) {
+  if (e instanceof DatabaseConfigurationError)
+    return Response.json({ error: e.message }, { status: 503 });
   if (e instanceof ApiError)
     return Response.json({ error: e.message }, { status: e.status });
   if (e instanceof Error && e.message === "CONFLICT")
@@ -60,17 +62,25 @@ export function failure(e: unknown) {
       { error: "Les données ont changé. Rechargez puis réessayez." },
       { status: 409 },
     );
-  console.error(e instanceof Error ? e.message : "Erreur serveur");
+  if (e && typeof e === "object" && "code" in e && e.code === "23505")
+    return Response.json(
+      { error: "Cette entrée existe déjà." },
+      { status: 409 },
+    );
+  console.error(
+    "Database operation failed",
+    e instanceof Error ? e.name : "UnknownError",
+  );
   return Response.json(
     { error: "Une erreur est survenue. Réessayez." },
     { status: 500 },
   );
 }
 export async function body(req: Request) {
-  if (Number(req.headers.get("content-length") || 0) > 8_000_000)
+  if (Number(req.headers.get("content-length") || 0) > 8000000)
     throw new ApiError(413, "Fichier trop volumineux.");
   const text = await req.text();
-  if (text.length > 8_000_000)
+  if (text.length > 8000000)
     throw new ApiError(413, "Requête trop volumineuse.");
   try {
     const value = JSON.parse(text);

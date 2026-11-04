@@ -13,42 +13,49 @@ import { stateSchema } from "@/lib/server/state-schema";
 import type { AppState } from "@/lib/types";
 import { ALL_STATUSES } from "@/lib/data";
 export async function GET() {
-  const user = await currentUser();
-  const { S, revision } = readState();
-  if (!user || user.role === "CLIENT") {
-    const ids = new Set(
-      user
-        ? (
-            db
-              .prepare("SELECT id FROM ownership WHERE user_id=?")
-              .all(user.id) as { id: string }[]
-          ).map((r) => r.id)
-        : [],
+  try {
+    const user = await currentUser();
+    const { S, revision } = await readState();
+    if (!user || user.role === "CLIENT") {
+      const ids = new Set(
+        user
+          ? (
+              (await db
+                .prepare("SELECT id FROM ownership WHERE user_id=?")
+                .all(user.id)) as {
+                id: string;
+              }[]
+            ).map((r) => r.id)
+          : [],
+      );
+      S.seatReservations = Object.fromEntries(
+        [...new Set(S.bookings.map((b) => b.tripId))].map((id) => [
+          id,
+          S.bookings.filter((b) => b.tripId === id).flatMap((b) => b.seats),
+        ]),
+      );
+      S.parcels = S.parcels.filter((p) => ids.has(p.id));
+      S.bookings = S.bookings.filter((b) => ids.has(b.id));
+      S.notifs = S.notifs.filter((n) => n.id && ids.has(n.id));
+      S.couriers = S.couriers.filter((c) =>
+        S.parcels.some((p) => p.courier === c.id),
+      );
+      S.vehicles.forEach((v) => (v.trip = null));
+    }
+    if (user?.role === "LIVREUR")
+      S.parcels.forEach((p) => {
+        p.otp = "";
+        if (p.proof) delete p.proof.code;
+      });
+    return Response.json(
+      { S, revision, user },
+      { headers: { "Cache-Control": "no-store" } },
     );
-    S.seatReservations = Object.fromEntries(
-      [...new Set(S.bookings.map((b) => b.tripId))].map((id) => [
-        id,
-        S.bookings.filter((b) => b.tripId === id).flatMap((b) => b.seats),
-      ]),
-    );
-    S.parcels = S.parcels.filter((p) => ids.has(p.id));
-    S.bookings = S.bookings.filter((b) => ids.has(b.id));
-    S.notifs = S.notifs.filter((n) => n.id && ids.has(n.id));
-    S.couriers = S.couriers.filter((c) =>
-      S.parcels.some((p) => p.courier === c.id),
-    );
-    S.vehicles.forEach((v) => (v.trip = null));
+  } catch (e) {
+    return failure(e);
   }
-  if (user?.role === "LIVREUR")
-    S.parcels.forEach((p) => {
-      p.otp = "";
-      if (p.proof) delete p.proof.code;
-    });
-  return Response.json(
-    { S, revision, user },
-    { headers: { "Cache-Control": "no-store" } },
-  );
 }
+
 export async function PATCH(req: Request) {
   try {
     sameOrigin(req);
@@ -60,8 +67,8 @@ export async function PATCH(req: Request) {
       "LIVREUR",
     ]);
     const b = await body(req);
-    transaction(() => {
-      const { S: old, revision } = readState();
+    const newRevision = await transaction(async () => {
+      const { S: old, revision } = await readState();
       if (b.revision !== revision) throw new Error("CONFLICT");
       const validated = stateSchema.safeParse(b.S);
       if (!validated.success)
@@ -231,11 +238,12 @@ export async function PATCH(req: Request) {
         } else if (typeof v !== "number" || !Number.isFinite(v) || v < 0)
           throw new ApiError(422, "Tarif invalide.");
       }
-      retainProofs(s);
-      writeState(s, revision);
-      audit(user.id, "operations.updated");
+      await retainProofs(s);
+      await writeState(s, revision);
+      await audit(user.id, "operations.updated");
+      return revision + 1;
     });
-    return Response.json({ ok: true, revision: readState().revision });
+    return Response.json({ ok: true, revision: newRevision });
   } catch (e) {
     return failure(e);
   }

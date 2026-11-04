@@ -42,13 +42,31 @@ test.beforeAll(async ({ playwright }) => {
   other = await playwright.request.newContext({
     baseURL: "http://127.0.0.1:3100",
   });
+  if (process.env.LIVREX_TEST_ADMIN_TOKEN) {
+    const denied = await admin.post("/api/auth", {
+      data: {
+        action: "register",
+        email: "admin@example.test",
+        name: "Admin Test",
+        password,
+      },
+    });
+    expect(denied.status()).toBe(403);
+  }
   for (const [api, email, name] of [
     [admin, "admin@example.test", "Admin Test"],
     [client, "client@example.test", "Awa Diop"],
     [other, "other@example.test", "Autre Client"],
   ] as const) {
     const r = await api.post("/api/auth", {
-      data: { action: "register", email, password, name, role: "ADMIN" },
+      data: {
+        action: "register",
+        email,
+        password,
+        name,
+        role: "ADMIN",
+        setupToken: process.env.LIVREX_TEST_ADMIN_TOKEN,
+      },
     });
     expect(r.status()).toBe(200);
   }
@@ -407,4 +425,21 @@ test("espaces professionnels : pages utilisables sur mobile", async ({
     ).toBe(true);
   }
   expect(errors).toEqual([]);
+});
+
+test("réservation simultanée : une seule confirmation pour un même siège", async () => {
+  const input = {
+    from: "DKR",
+    to: "TBA",
+    date: tomorrow,
+    tripId: `DKR-TBA-${tomorrow}-09:00`,
+    seats: [22],
+    names: ["Awa Diop"],
+    contact: { tel: "771234567", email: "", channel: "SMS" },
+  };
+  const results = await Promise.all([
+    post(client, "/api/bookings", input),
+    post(admin, "/api/bookings", input),
+  ]);
+  expect(results.map((r) => r.status()).sort()).toEqual([201, 409]);
 });

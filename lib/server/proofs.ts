@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { db } from "./db";
 import type { AppState } from "../types";
-export function retainProofs(S: AppState) {
+export async function retainProofs(S: AppState) {
   for (const p of S.parcels) {
     if (!p.proof) continue;
     for (const key of ["photo", "signature"] as const) {
@@ -12,12 +12,9 @@ export function retainProofs(S: AppState) {
       if (!match) continue;
       const data = Buffer.from(match[2], "base64");
       const id = createHash("sha256").update(p.id).update(data).digest("hex");
-      db.prepare("INSERT OR IGNORE INTO proofs VALUES(?,?,?,?)").run(
-        id,
-        p.id,
-        match[1],
-        data,
-      );
+      await db
+        .prepare("INSERT OR IGNORE INTO proofs VALUES(?,?,?,?)")
+        .run(id, p.id, match[1], data);
       p.proof[key] = "/api/proofs/" + id;
     }
   }

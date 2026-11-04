@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     if (!key || key.length > 100)
       throw new ApiError(400, "Identifiant de requête requis.");
     return Response.json(
-      createBooking(user, await body(req), user.id + ":" + key),
+      await createBooking(user, await body(req), user.id + ":" + key),
       { status: 201 },
     );
   } catch (e) {

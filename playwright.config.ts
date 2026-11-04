@@ -18,6 +18,8 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120000,
     env: {
+      DATABASE_URL: process.env.LIVREX_TEST_DATABASE_URL || "",
+      ADMIN_SETUP_TOKEN: process.env.LIVREX_TEST_ADMIN_TOKEN || "",
       LIVREX_DATA_DIR: "/tmp/livrex-tests-" + Date.now(),
       NEXT_TELEMETRY_DISABLED: "1",
     },

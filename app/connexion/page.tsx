@@ -10,6 +10,7 @@ function Form() {
   const { refresh } = useStore();
   const [register, setRegister] = useState(false),
     [setup, setSetup] = useState(false),
+    [needsToken, setNeedsToken] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
@@ -17,6 +18,7 @@ function Form() {
       .then((r) => r.json())
       .then((d) => {
         setSetup(d.needsSetup);
+        setNeedsToken(d.needsSetupToken);
         if (d.needsSetup) setRegister(true);
       });
   }, []);
@@ -34,6 +36,7 @@ function Form() {
           name: data.get("name") || undefined,
           email: data.get("email"),
           password: data.get("password"),
+          setupToken: data.get("setupToken") || undefined,
         }),
       });
       const d = await r.json();
@@ -128,6 +131,24 @@ function Form() {
             />
             <small className="muted">10 caractères minimum</small>
           </div>
+          {setup && needsToken && (
+            <div className="field">
+              <label htmlFor="auth-setup-token">
+                Code d’initialisation administrateur
+              </label>
+              <input
+                className="in"
+                id="auth-setup-token"
+                name="setupToken"
+                type="password"
+                autoComplete="off"
+                required
+              />
+              <small className="muted">
+                Le code privé défini dans les paramètres de l’hébergement.
+              </small>
+            </div>
+          )}
           {error && (
             <p className="errbox" role="alert">
               {error}

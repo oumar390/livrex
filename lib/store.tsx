@@ -46,7 +46,10 @@ function createEngine() {
   const emit = () => listeners.forEach((fn) => fn());
   async function refresh() {
     const r = await fetch("/api/state", { cache: "no-store" });
-    if (!r.ok) throw Error("Connexion au serveur indisponible.");
+    if (!r.ok) {
+      const problem = await r.json().catch(() => ({}));
+      throw Error(problem.error || "Connexion au serveur indisponible.");
+    }
     const data = await r.json();
     if (!pending) {
       const S =

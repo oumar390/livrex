@@ -2,6 +2,10 @@
 
 Application Next.js pour les voyages, les envois de marchandises et les opérations des équipes. Interface française conçue pour le téléphone, puis adaptée à la tablette et à l’ordinateur.
 
+## Supabase et Vercel
+
+La version hébergée utilise PostgreSQL avec Supabase. Suivre le [guide Supabase + Vercel](docs/SUPABASE_VERCEL.md) : créer le projet Supabase, définir `DATABASE_URL` et `ADMIN_SETUP_TOKEN` dans Vercel, puis déployer la branche `codex/livrex-mobile-platform`. Les migrations sont idempotentes et la première création d’administrateur est protégée par le code privé en hébergement. Aucun secret ne doit être ajouté au dépôt.
+
 ## Démarrer
 
 Node.js **24 LTS** et npm. Les versions exactes des dépendances sont verrouillées dans `package-lock.json`.
@@ -13,7 +17,7 @@ npm run dev
 
 Next.js **16.4.5**, React **19.3.1**, TypeScript **6.0.3**. TypeScript 7 n’est pas encore pris en charge par typescript-eslint ; ESLint 9.39.5 reste la version compatible avec les plugins livrés par Next.js. Aucun contrôle de signature ou de certificat n’est désactivé.
 
-Au premier démarrage, `/connexion` affiche la création du premier compte administrateur. Effectuer cette configuration **avant d’exposer l’application au public**. Les inscriptions suivantes créent uniquement des clients. Aucun compte ni mot de passe de production n’est livré. Chaque collaborateur s’inscrit, puis l’administrateur attribue son rôle dans `/equipe` ; ce changement invalide ses sessions existantes.
+Au premier démarrage, `/connexion` affiche la création du premier compte administrateur. Sur Vercel, cette opération demande le code privé `ADMIN_SETUP_TOKEN` configuré dans les paramètres. Effectuer cette configuration **avant d’exposer l’application au public**. Les inscriptions suivantes créent uniquement des clients. Aucun compte ni mot de passe de production n’est livré. Chaque collaborateur s’inscrit, puis l’administrateur attribue son rôle dans `/equipe` ; ce changement invalide ses sessions existantes.
 
 ## Trois espaces
 
@@ -25,7 +29,9 @@ Au premier démarrage, `/connexion` affiche la création du premier compte admin
 
 ## Données et sécurité
 
-SQLite natif de Node (`node:sqlite`) : `.data/livrex.sqlite`, WAL activé. `LIVREX_DATA_DIR` permet de choisir un autre répertoire persistant. Les photos et signatures sont stockées séparément du document d’état dans la même base, accessibles via une route authentifiée. Les photos sont limitées à 2 Mo côté interface. Le code de remise n’est pas exposé aux comptes livreurs ; il est vérifié côté serveur pour la livraison avec signature.
+Avec `DATABASE_URL`, PostgreSQL est utilisé via un pool de connexions privé, avec TLS vérifié et RLS activée pour les accès Supabase publics. Les migrations et les écritures transactionnelles sont protégées par un verrou partagé entre instances.
+
+Sans `DATABASE_URL`, le développement local utilise SQLite natif de Node (`node:sqlite`) : `.data/livrex.sqlite`, WAL activé. `LIVREX_DATA_DIR` permet de choisir un autre répertoire persistant. Les photos et signatures sont stockées séparément du document d’état dans la même base, accessibles via une route authentifiée. Les photos sont limitées à 2 Mo côté interface. Le code de remise n’est pas exposé aux comptes livreurs ; il est vérifié côté serveur pour la livraison avec signature.
 
 Les mots de passe utilisent scrypt avec sel individuel. Les sessions utilisent un cookie HttpOnly/SameSite et un jeton aléatoire dont seul le condensat est enregistré. Les écritures de navigateur vérifient leur origine. Les prix, disponibilités et droits sont contrôlés côté serveur. Les réservations sont transactionnelles, avec contrôle des sièges et idempotence. Les opérations concurrentes utilisent une révision : un conflit n’écrase pas silencieusement les changements d’un autre opérateur. Un journal d’audit est enregistré.
 
@@ -76,6 +82,8 @@ npm run build
 npm start -- --hostname 0.0.0.0
 ```
 
-Cette version utilise un **serveur Node unique avec disque persistant**. Un hébergement serverless à disque éphémère ne convient pas à cette configuration SQLite. Mettre en place HTTPS, un volume durable et des sauvegardes avant une exploitation réelle. Pour sauvegarder une base active avec cohérence : `npm run db:backup -- /chemin/securise/livrex.sqlite`. La copie contient des données personnelles et doit rester privée. La restauration se fait serveur arrêté, à partir d’une sauvegarde vérifiée ; ne pas copier seulement le fichier principal pendant que WAL est actif.
+Avec Supabase, les fonctions Vercel partagent la même base PostgreSQL persistante et n’écrivent aucune donnée applicative sur le disque local.
+
+Le mode **SQLite local** utilise un serveur Node unique avec disque persistant. Un hébergement serverless à disque éphémère ne convient pas à ce mode SQLite. Mettre en place HTTPS, un volume durable et des sauvegardes avant une exploitation réelle. Pour sauvegarder une base active avec cohérence : `npm run db:backup -- /chemin/securise/livrex.sqlite`. La copie contient des données personnelles et doit rester privée. La restauration se fait serveur arrêté, à partir d’une sauvegarde vérifiée ; ne pas copier seulement le fichier principal pendant que WAL est actif.
 
 La publication n’est pas effectuée automatiquement. Les processus doivent être redémarrés après restauration d’un environnement cloud.

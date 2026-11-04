@@ -1,3 +1,7 @@
+if (process.env.DATABASE_URL)
+  throw Error(
+    "Base PostgreSQL active : utilisez les sauvegardes Supabase ou pg_dump. Cette commande est réservée à SQLite local.",
+  );
 import { DatabaseSync, backup } from "node:sqlite";
 import path from "node:path";
 import { existsSync, chmodSync } from "node:fs";

@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     if (!key || key.length > 100)
       throw new ApiError(400, "Identifiant de requête requis.");
     return Response.json(
-      createParcel(user, await body(req), user.id + ":" + key),
+      await createParcel(user, await body(req), user.id + ":" + key),
       { status: 201 },
     );
   } catch (e) {

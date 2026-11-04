@@ -12,7 +12,7 @@ export async function GET() {
   try {
     const u = await requireUser();
     return Response.json(
-      db
+      await db
         .prepare(
           "SELECT id,name,created FROM api_keys WHERE user_id=? ORDER BY created DESC",
         )
@@ -29,23 +29,21 @@ export async function POST(req: Request) {
     const b = await body(req);
     if (typeof b.name !== "string" || !b.name.trim() || b.name.length > 100)
       throw new ApiError(422, "Indiquez un nom pour cette clé.");
-    const count = db
+    const count = (await db
       .prepare("SELECT count(*) AS n FROM api_keys WHERE user_id=?")
-      .get(u.id) as { n: number };
+      .get(u.id)) as {
+      n: number;
+    };
     if (count.n >= 10)
       throw new ApiError(
         422,
         "Limite de 10 clés atteinte. Révoquez une clé inutilisée.",
       );
     const token = "lx_" + randomBytes(32).toString("hex");
-    db.prepare("INSERT INTO api_keys VALUES(?,?,?,?,?)").run(
-      randomUUID(),
-      u.id,
-      b.name.trim(),
-      digest(token),
-      Date.now(),
-    );
-    audit(u.id, "api_key.created");
+    await db
+      .prepare("INSERT INTO api_keys VALUES(?,?,?,?,?)")
+      .run(randomUUID(), u.id, b.name.trim(), digest(token), Date.now());
+    await audit(u.id, "api_key.created");
     return Response.json(
       { token },
       { status: 201, headers: { "Cache-Control": "no-store" } },
@@ -60,8 +58,10 @@ export async function DELETE(req: Request) {
     const u = await requireUser();
     const b = await body(req);
     if (typeof b.id !== "string") throw new ApiError(422, "Clé invalide.");
-    db.prepare("DELETE FROM api_keys WHERE id=? AND user_id=?").run(b.id, u.id);
-    audit(u.id, "api_key.revoked");
+    await db
+      .prepare("DELETE FROM api_keys WHERE id=? AND user_id=?")
+      .run(b.id, u.id);
+    await audit(u.id, "api_key.revoked");
     return Response.json({ ok: true });
   } catch (e) {
     return failure(e);

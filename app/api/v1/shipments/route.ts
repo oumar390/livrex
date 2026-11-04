@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     const bearer = req.headers.get("authorization");
     let u: User;
     if (bearer?.startsWith("Bearer ")) {
-      const row = db
+      const row = await db
         .prepare(
           "SELECT u.id,u.name,u.email,u.role FROM users u JOIN api_keys k ON k.user_id=u.id WHERE k.token=?",
         )
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       u = await requireUser();
     }
     const b = await body(req);
-    const p = createParcel(
+    const p = await createParcel(
       u,
       {
         type: "EXPRESS",

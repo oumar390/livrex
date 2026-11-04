@@ -38,7 +38,7 @@ export const parcelInput = z.object({
   wanted: z.string().default(""),
   delivery: z.enum(["retrait", "livraison"]).default("retrait"),
 });
-export function createParcel(user: User, input: unknown, key: string) {
+export async function createParcel(user: User, input: unknown, key: string) {
   const parsed = parcelInput.safeParse(input);
   if (!parsed.success)
     throw new ApiError(
@@ -46,12 +46,16 @@ export function createParcel(user: User, input: unknown, key: string) {
       "Vérifiez les coordonnées, le poids, les dimensions et la description.",
     );
   const f = parsed.data;
-  return transaction(() => {
-    const cached = db
+  return await transaction(async () => {
+    const cached = (await db
       .prepare("SELECT response FROM idempotency WHERE key=? AND user_id=?")
-      .get(key, user.id) as { response: string } | undefined;
+      .get(key, user.id)) as
+      | {
+          response: string;
+        }
+      | undefined;
     if (cached) return JSON.parse(cached.response) as Parcel;
-    const { S, revision } = readState();
+    const { S, revision } = await readState();
     if (
       f.type === "EXPRESS" &&
       (f.weight > S.tarifs.expressMax || f.fromQ === f.toQ)
@@ -118,14 +122,12 @@ export function createParcel(user: User, input: unknown, key: string) {
       to: user.name,
       msg: "Votre envoi " + p.id + " est enregistré.",
     });
-    writeState(S, revision);
-    db.prepare("INSERT INTO ownership VALUES(?,?)").run(p.id, user.id);
-    db.prepare("INSERT INTO idempotency VALUES(?,?,?)").run(
-      key,
-      user.id,
-      JSON.stringify(p),
-    );
-    audit(user.id, "parcel.created:" + p.id);
+    await writeState(S, revision);
+    await db.prepare("INSERT INTO ownership VALUES(?,?)").run(p.id, user.id);
+    await db
+      .prepare("INSERT INTO idempotency VALUES(?,?,?)")
+      .run(key, user.id, JSON.stringify(p));
+    await audit(user.id, "parcel.created:" + p.id);
     return p;
   });
 }
@@ -142,17 +144,21 @@ const bookingInput = z.object({
     channel: z.enum(["SMS", "EMAIL", "CALL", "WA"]),
   }),
 });
-export function createBooking(user: User, input: unknown, key: string) {
+export async function createBooking(user: User, input: unknown, key: string) {
   const parsed = bookingInput.safeParse(input);
   if (!parsed.success)
     throw new ApiError(422, "Vérifiez les voyageurs et les coordonnées.");
   const f = parsed.data;
-  return transaction(() => {
-    const cached = db
+  return await transaction(async () => {
+    const cached = (await db
       .prepare("SELECT response FROM idempotency WHERE key=? AND user_id=?")
-      .get(key, user.id) as { response: string } | undefined;
+      .get(key, user.id)) as
+      | {
+          response: string;
+        }
+      | undefined;
     if (cached) return JSON.parse(cached.response) as Booking;
-    const { S, revision } = readState();
+    const { S, revision } = await readState();
     const trip = tripsFor(S, f).find((t) => t.id === f.tripId);
     if (f.date < dIso(Date.now()) || !trip || trip.past)
       throw new ApiError(422, "Ce départ n’est plus disponible.");
@@ -188,14 +194,12 @@ export function createBooking(user: User, input: unknown, key: string) {
       to: user.name,
       msg: "Réservation " + b.id + " confirmée, à régler en agence.",
     });
-    writeState(S, revision);
-    db.prepare("INSERT INTO ownership VALUES(?,?)").run(b.id, user.id);
-    db.prepare("INSERT INTO idempotency VALUES(?,?,?)").run(
-      key,
-      user.id,
-      JSON.stringify(b),
-    );
-    audit(user.id, "booking.created:" + b.id);
+    await writeState(S, revision);
+    await db.prepare("INSERT INTO ownership VALUES(?,?)").run(b.id, user.id);
+    await db
+      .prepare("INSERT INTO idempotency VALUES(?,?,?)")
+      .run(key, user.id, JSON.stringify(b));
+    await audit(user.id, "booking.created:" + b.id);
     return b;
   });
 }
