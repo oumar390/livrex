@@ -1,33 +1,33 @@
-import type { Metadata, Viewport } from 'next';
-import type { ReactNode } from 'react';
-import Header from '@/components/Header';
-import { StoreProvider } from '@/lib/store';
-import './globals.css';
+import { isDemoRuntime } from "@/lib/server/runtime";
+export const dynamic = "force-dynamic";
+import type { Metadata, Viewport } from "next";
+import type { ReactNode } from "react";
+import Header from "@/components/Header";
+import { StoreProvider } from "@/lib/store";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'Afrique Express Services',
-  description: 'Voyageurs, fret routier et livraison express LIVREX au Sénégal. Prototype fonctionnel.',
+  title: {
+    default: "LIVREX · Voyager et envoyer simplement",
+    template: "%s · LIVREX",
+  },
+  description:
+    "Voyages, livraison et fret au Sénégal. Réservez vos places et suivez vos envois avec Lifekhalifa.",
 };
 
 export const viewport: Viewport = {
-  width: 'device-width',
+  width: "device-width",
   initialScale: 1,
-  viewportFit: 'cover',
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="fr">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
-      </head>
+    <html lang="fr" data-scroll-behavior="smooth">
       <body>
         <Header />
-        <StoreProvider>
-          <main>{children}</main>
+        <StoreProvider demoMode={isDemoRuntime()}>
+          <main id="contenu">{children}</main>
         </StoreProvider>
       </body>
     </html>
